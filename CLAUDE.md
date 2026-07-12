@@ -50,3 +50,14 @@ their shared QA tooling. Remote: https://github.com/allanatal/Presentation.git
   bullets and every title-slide subtitle. Fixed with `placeholder_by_idx()`; the same trap was
   in SKILL.md example code. Never use `idx in slide.placeholders`; and never trust a
   conversion pipeline that hasn't been checked by content diffing.
+- 2026-07-12 — Deck-spec→builder refactor landed. Two environment/tooling notes: (1) `build/`
+  is intentionally gitignored ("repo is about skills, not decks") — the DRAGON regression proof
+  (`DRAGON01_deck_spec.json`, built pptx, QA) lives there as a LOCAL artifact; don't `git add`
+  it. Durable record goes in spec.md + the tracked `tests/fixtures/mini_spec.json`. (2) This
+  Mac has no `python` on PATH, only `python3`; and `sync-skills.sh`'s zip exclude `__pycache__/*`
+  did NOT match nested `scripts/__pycache__/` (zip -x matches the full member path) — fixed to
+  `*__pycache__*` / `*.pyc` / `scripts/tests/*` so dev artifacts don't ship in `dist/*.skill`.
+- 2026-07-12 — Design pattern worth keeping: making font floors a STRUCTURAL guarantee. The
+  deck spec has no font-size field at all, so a sub-floor font is unrepresentable; sizes live
+  only in `build_deck.py` (all clamped via `pt(size, floor)`). Prefer designing a whole bug
+  class out of the input format over re-checking for it downstream.

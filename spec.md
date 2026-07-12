@@ -3,12 +3,13 @@
 **Owner:** Allan (medical oncologist, GI malignancies — Moffitt Cancer Center)
 **Working env:** Claude Code / VS Code + Claude Code
 **Scope:** Enhancements to my existing PowerPoint-generation skills, sequenced by value-to-effort.
-**Status:** Goals 0 and 1 IMPLEMENTED and VERIFIED. Regression gate PASSED (2026-07-12):
-DRAGON-01 (JAMA Oncology, 71 claims) built in a cold session → `_QA.md` came out 71 ✅ / 0 ❌ /
-4 ⚠️ (all legitimate figure-picture confirmations). Desktop-app copies are one version behind
-until `dist/*.skill` is re-uploaded via the app UI. Goals 2, 2.5, 3 pending, plus a new
-cross-cutting **Token Efficiency & Multi-Model Routing** section (added 2026-07-12; recommends
-a deck-spec→builder refactor to cut per-deck token cost — one deck ≈ 30% of a plan session).
+**Status:** Goals 0 and 1 IMPLEMENTED and VERIFIED. **Token-Efficiency option 1 (deck-spec →
+fixed builder) IMPLEMENTED and VERIFIED 2026-07-12** (pulled ahead of Goal 2): DRAGON-01
+rebuilt from a 14.5 KB deck spec via the committed `scripts/build_deck.py` → `_QA.md` 71 ✅ /
+0 ❌ / 4 ⚠️, identical to the original hand-authored (28 KB) builder's gate. Regression gate
+still PASSES. Desktop-app copies are one version behind until `dist/*.skill` is re-uploaded via
+the app UI. Goals 2, 2.5, 3 pending. See the **Token Efficiency & Multi-Model Routing** section
+below (option 1 done; options 2–4 open).
 
 ## Decisions log (2026-07-11 brainstorm)
 
@@ -267,15 +268,21 @@ regardless of which model built it, so downstream mechanical steps are safe to o
 
 ### Options, ranked by value-to-effort
 
-1. **Deck-spec → fixed builder (RECOMMENDED — biggest win, no new dependency).**
-   Stop having the model hand-author python-pptx per deck. The model emits a compact
-   **deck spec** (JSON: ordered, typed slides — title/bullets/table/figure/study-design —
-   referencing claim IDs in the existing claims JSON). A single committed `build_deck.py`
-   consumes spec + claims → deck. Cuts the ~28 KB code generation to ~5–8 KB of structured
-   data, and makes builds deterministic/reproducible. This converges with `pptx-to-pptx`'s
-   existing `parsed.json → build_from_parsed.py` pattern and with Goal 3 (parameter-driven
-   builders) — so it is largely shared work, not net-new. **Do this first; it needs no
-   external model and *improves* accuracy (no hand-typed numbers).**
+1. **Deck-spec → fixed builder — ✅ IMPLEMENTED 2026-07-12 (biggest win, no new dependency).**
+   The model no longer hand-authors python-pptx per deck. It emits a compact **deck spec**
+   (JSON: ordered, typed slides — title/bullets/table/figure/study_design/consort —
+   referencing claim IDs). The committed `skills/academic-paper-to-pptx/scripts/build_deck.py`
+   consumes spec + claims → deck, substitutes `{{claim-id}}` tokens, auto-fills each claim's
+   `slide`, and writes a resolved claims file for QA. **Result:** DRAGON-01's 28 KB
+   hand-authored builder → a 14.5 KB spec (~49% smaller, and pure data vs authored code);
+   qa_crosscheck 71 ✅ / 0 ❌ / 4 ⚠️, identical to the hand-authored gate. Two integrity wins
+   fell out for free: (a) the spec has **no font field**, so a sub-floor font is impossible;
+   (b) numbers come only from the claims file (tokens/inline), never hand-typed into code, and
+   every claim must be referenced (builder errors otherwise) — enforcing "every claim placed
+   before QA." Converges with `pptx-to-pptx`'s `parsed.json → build_from_parsed.py` and is a
+   down-payment on Goal 3. Schema: `references/deck-spec.md`; 19 unit tests +
+   `tests/fixtures/mini_spec.json`. Slide-builders.md trimmed 19 KB → 4.6 KB (renderer
+   reference, no longer per-deck code).
 2. **Delegate mechanical build to Codex (uses the OpenAI/ChatGPT key).** With the Codex
    plugin for Claude Code (`https://github.com/openai/codex-plugin-cc`; commands
    `/codex:setup`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review`,
@@ -301,9 +308,10 @@ model. Accuracy over token savings, always.
 
 ### Sequencing note
 
-Option 1 is the highest-leverage and is effectively a down-payment on Goal 3 — consider
-pulling it forward (before or alongside Goal 2). Options 2–3 depend on external tooling
-(Codex CLI, Presenton) and Allan's keys.
+Option 1 was pulled forward and **landed 2026-07-12** (before Goal 2), as recommended — it
+pays for itself on every deck built in the meantime and is a down-payment on Goal 3. Next up:
+**Goal 2 (Presenton MCP)**. Options 2–4 depend on external tooling (Codex CLI, Presenton) and
+Allan's keys.
 
 ---
 

@@ -20,10 +20,12 @@ for skill_dir in "$SKILLS_SRC"/*/; do
   rsync -a --delete "$skill_dir" "$CLAUDE_SKILLS/$name/"
   echo "   installed  $CLAUDE_SKILLS/$name/"
 
-  # Desktop-app package: SKILL.md at the archive root (same layout as .skill exports)
+  # Desktop-app package: SKILL.md at the archive root (same layout as .skill exports).
+  # Exclude dev-only artifacts (unit tests, bytecode) — they never run in the skill runtime.
   zip_path="$DIST/$name.skill"
   rm -f "$zip_path"
-  (cd "$skill_dir" && zip -qr "$zip_path" . -x ".*" -x "__pycache__/*")
+  (cd "$skill_dir" && zip -qr "$zip_path" . \
+      -x ".*" -x "*__pycache__*" -x "*.pyc" -x "scripts/tests/*")
   echo "   packaged   $zip_path"
 done
 
