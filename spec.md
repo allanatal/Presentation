@@ -3,7 +3,10 @@
 **Owner:** Allan (medical oncologist, GI malignancies — Moffitt Cancer Center)
 **Working env:** Claude Code / VS Code + Claude Code
 **Scope:** Enhancements to my existing PowerPoint-generation skills, sequenced by value-to-effort.
-**Status:** Goals 0 and 1 IMPLEMENTED (2026-07-11). Goals 2, 2.5, 3 pending.
+**Status:** Goals 0 and 1 IMPLEMENTED (2026-07-11); synthetic + mechanical round-trips verified.
+Pending before Goal 2: regression gate — build a deck from a real public open-access oncology
+RCT with `academic-paper-to-pptx` and confirm its `_QA.md` comes out clean. Desktop-app copies
+are one version behind until `dist/*.skill` is re-uploaded via the app UI. Goals 2, 2.5, 3 pending.
 
 ## Decisions log (2026-07-11 brainstorm)
 
