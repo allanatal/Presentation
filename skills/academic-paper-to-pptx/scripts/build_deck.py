@@ -276,3 +276,72 @@ def render_figure(ctx, s, n):
         p.text = line; p.font.size = Pt(14); p.font.name = FONT; p.font.color.rgb = BODY
     add_badge_and_citation(ctx, slide)
     return slide
+
+
+def render_table(ctx, s, n):
+    slide = ctx.prs.slides.add_slide(ctx.layouts["Title Only"])
+    slide.placeholders[0].text = s["title"]
+    font = s.get("font", 15)
+    row_h = s.get("row_h", 360000)
+    top = s.get("top", 1900000)
+    if s.get("key_message"):
+        key_message(slide, s["key_message"])
+        top = max(top, 1980000)
+    arms = s["arms"]
+    rows = s["rows"]
+    n_cols = 1 + len(arms)
+    n_rows = 1 + len(rows)
+    label_w = Inches(4.6)
+    data_w = int((Inches(11.0) - label_w) / max(len(arms), 1))
+    col_w = [label_w] + [data_w] * len(arms)
+    total_w = sum(col_w)
+    table_x = (Emu(SLIDE_W) - total_w) // 2
+    shp = slide.shapes.add_table(n_rows, n_cols, table_x, Emu(top), total_w,
+                                 Emu(n_rows * row_h))
+    tbl = shp.table
+    tbl.first_row = False; tbl.horz_banding = False
+    for i, w in enumerate(col_w):
+        tbl.columns[i].width = int(w)
+    # header
+    c0 = tbl.cell(0, 0); c0.text = s.get("label_header", "Characteristic")
+    for p in c0.text_frame.paragraphs:
+        p.font.size = pt(font, F_TABLE); p.font.bold = True
+        p.font.color.rgb = WHITE; p.font.name = FONT
+    c0.fill.solid(); c0.fill.fore_color.rgb = TITLE_BLUE
+    for j, arm in enumerate(arms):
+        c = tbl.cell(0, j + 1); c.text = arm["label"]
+        c.fill.solid(); c.fill.fore_color.rgb = col(arm.get("color", "teal"))
+        for p in c.text_frame.paragraphs:
+            p.font.size = pt(font, F_TABLE); p.font.bold = True
+            p.font.color.rgb = WHITE; p.font.name = FONT; p.alignment = PP_ALIGN.CENTER
+    for r in tbl.rows:
+        for c in r.cells:
+            c.margin_top = Emu(16000); c.margin_bottom = Emu(16000)
+    for i, row in enumerate(rows):
+        is_hdr = row.get("hdr", False)
+        c = tbl.cell(i + 1, 0); c.text = row["label"]
+        for p in c.text_frame.paragraphs:
+            p.font.size = pt(font, F_TABLE); p.font.name = FONT
+            p.font.bold = is_hdr or row.get("bold", False)
+            p.font.color.rgb = TITLE_BLUE if is_hdr else BODY
+        vals = row.get("vals", [""] * len(arms))
+        for j, v in enumerate(vals):
+            c = tbl.cell(i + 1, j + 1); c.text = v
+            for p in c.text_frame.paragraphs:
+                p.font.size = pt(font, F_TABLE); p.font.name = FONT
+                p.font.color.rgb = BODY; p.alignment = PP_ALIGN.CENTER
+        if is_hdr:
+            for j in range(n_cols):
+                cc = tbl.cell(i + 1, j)
+                cc.fill.solid(); cc.fill.fore_color.rgb = LIGHT_BG
+    for r in tbl.rows:
+        r.height = Emu(row_h)
+    if s.get("note"):
+        note_y = top + n_rows * row_h + 120000
+        nb = slide.shapes.add_textbox(Emu(838200), Emu(note_y), Emu(10515600), Emu(750000))
+        nb.text_frame.word_wrap = True
+        p = nb.text_frame.paragraphs[0]
+        p.text = s["note"]
+        p.font.size = Pt(14); p.font.name = FONT; p.font.italic = True; p.font.color.rgb = BODY
+    add_badge_and_citation(ctx, slide)
+    return slide

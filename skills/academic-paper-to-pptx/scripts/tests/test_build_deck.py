@@ -184,3 +184,35 @@ def test_render_figure_embeds_picture(tmp_path):
     bd.render_figure(ctx, s, 3)
     slide = ctx.prs.slides[0]
     assert any(sh.shape_type == MSO_SHAPE_TYPE.PICTURE for sh in slide.shapes)
+
+
+# ═══════════ Task 4: table renderer ═══════════
+
+def test_render_table_dims_center_and_floor(tmp_path):
+    ctx, out = _new_ctx(tmp_path)
+    s = {"type": "table", "title": "Baseline",
+         "label_header": "Characteristic",
+         "arms": [{"label": "IP (n=148)", "color": "teal"},
+                  {"label": "PS (n=74)", "color": "gray"}],
+         "rows": [{"label": "Age", "vals": ["60 (24-70)", "56 (23-74)"], "bold": True},
+                  {"label": "Sex", "hdr": True},
+                  {"label": "  Female", "vals": ["68 (45.9)", "36 (48.6)"]}],
+         "note": "No treatment-related deaths."}
+    bd.render_table(ctx, s, 8)
+    slide = ctx.prs.slides[0]
+    tbl = None
+    for sh in slide.shapes:
+        if sh.has_table:
+            tbl = sh
+    assert tbl is not None
+    assert len(tbl.table.rows) == 4       # header + 3
+    assert len(tbl.table.columns) == 3    # label + 2 arms
+    total = sum(c.width for c in tbl.table.columns)
+    assert abs(tbl.left - (bd.SLIDE_W - total) // 2) <= 3
+    for row in tbl.table.rows:
+        for cell in row.cells:
+            for p in cell.text_frame.paragraphs:
+                for r in p.runs:
+                    if r.font.size:
+                        assert r.font.size.pt >= 14
+    assert "No treatment-related deaths." in _texts(slide)
