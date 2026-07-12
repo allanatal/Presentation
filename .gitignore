@@ -1,0 +1,21 @@
+# Build artifacts
+dist/
+
+# Office temp/lock files
+~$*
+*.tmp
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Local deck builds / QA workspaces (keep the repo about the skills, not the decks)
+build/
+output/
+*_QA.md
+*_claims.json
