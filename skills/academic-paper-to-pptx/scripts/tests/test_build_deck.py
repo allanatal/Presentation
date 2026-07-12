@@ -98,3 +98,89 @@ def test_slide_level_claims_assigned():
     sdata = {"type": "table", "claims": ["dem-01"], "rows": []}
     bd.assign_slide_claims(sdata, c, slide_no=8)
     assert c.referenced["dem-01"] == 8
+
+
+# ═══════════ Deck-build fixtures ═══════════
+
+import shutil
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+
+def _skill_root():
+    # scripts/ -> skill root
+    return os.path.dirname(os.path.dirname(os.path.abspath(bd.__file__)))
+
+
+def _new_ctx(tmp_path):
+    out = str(tmp_path / "out.pptx")
+    shutil.copy(os.path.join(_skill_root(), "references", "template.pptx"), out)
+    prs = Presentation(out)
+    layouts = {l.name: l for l in prs.slide_masters[0].slide_layouts}
+    ctx = bd.Ctx(prs=prs, layouts=layouts, study="TEST-01",
+                 citation="Author et al. 2026", skill_root=_skill_root(),
+                 images_base=str(tmp_path))
+    return ctx, out
+
+
+def _texts(slide):
+    out = []
+    for sh in slide.shapes:
+        if sh.has_text_frame:
+            out.append(sh.text_frame.text)
+    return "\n".join(out)
+
+
+# ═══════════ Task 3: title / bullets / figure renderers ═══════════
+
+def test_render_title_sets_trial_name(tmp_path):
+    ctx, out = _new_ctx(tmp_path)
+    s = {"type": "title", "title": "TEST-01: A Trial", "subtitle": "Phase 3",
+         "authors": "Author A", "affiliation": "Center X", "date": "Journal 2026"}
+    bd.render_title(ctx, s, 1)
+    slide = ctx.prs.slides[0]
+    assert "TEST-01: A Trial" in _texts(slide)
+    assert "Phase 3" in _texts(slide)
+
+
+def test_render_bullets_counts_and_badge(tmp_path):
+    ctx, out = _new_ctx(tmp_path)
+    s = {"type": "bullets", "title": "Background",
+         "bullets": [{"text": "Point one"}, {"text": "Point two", "sub": ["sub a"]}]}
+    bd.render_bullets(ctx, s, 2)
+    slide = ctx.prs.slides[0]
+    txt = _texts(slide)
+    assert "Point one" in txt and "Point two" in txt and "sub a" in txt
+    assert "TEST-01" in txt              # badge
+    assert "Author et al. 2026" in txt   # citation
+
+
+def test_render_bullets_font_floors(tmp_path):
+    ctx, out = _new_ctx(tmp_path)
+    s = {"type": "bullets", "title": "T",
+         "bullets": [{"text": "L0"}, {"text": "L0b", "sub": ["L1"]}]}
+    bd.render_bullets(ctx, s, 2)
+    slide = ctx.prs.slides[0]
+    body = None
+    for sh in slide.shapes:
+        if sh.is_placeholder and sh.placeholder_format.idx == 1:
+            body = sh
+    sizes = {}
+    for p in body.text_frame.paragraphs:
+        for r in p.runs:
+            if r.font.size:
+                sizes.setdefault(p.level, set()).add(r.font.size.pt)
+    assert all(x >= 18 for x in sizes.get(0, {18}))
+    assert all(x >= 16 for x in sizes.get(1, {16}))
+
+
+def test_render_figure_embeds_picture(tmp_path):
+    from PIL import Image as PILImage
+    p = tmp_path / "fig.png"
+    PILImage.new("RGB", (800, 600), "white").save(p)
+    ctx, out = _new_ctx(tmp_path)
+    s = {"type": "figure", "title": "OS", "image": "fig.png",
+         "key_message": "median", "caption": ["line1"]}
+    bd.render_figure(ctx, s, 3)
+    slide = ctx.prs.slides[0]
+    assert any(sh.shape_type == MSO_SHAPE_TYPE.PICTURE for sh in slide.shapes)

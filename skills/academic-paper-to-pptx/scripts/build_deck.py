@@ -143,3 +143,136 @@ def assign_slide_claims(sdata, claims, slide_no):
     """Assign every id in a slide's explicit `claims` list to slide_no."""
     for cid in sdata.get("claims", []):
         claims.assign(cid, slide_no)
+
+
+# ═══════════════════════════════════════════════════
+#  Build context + shared helpers
+# ═══════════════════════════════════════════════════
+
+class Ctx:
+    def __init__(self, prs, layouts, study, citation, skill_root, images_base):
+        self.prs = prs
+        self.layouts = layouts
+        self.study = study
+        self.citation = citation
+        self.skill_root = skill_root
+        self.images_base = images_base
+
+
+def add_badge_and_citation(ctx, slide):
+    badge = slide.shapes.add_textbox(Emu(9984826), Emu(157655), Emu(1671098), Emu(369332))
+    p = badge.text_frame.paragraphs[0]
+    p.text = ctx.study
+    p.font.size = pt(11, F_BADGE); p.font.bold = True
+    p.font.color.rgb = TITLE_BLUE; p.font.name = FONT
+    p.alignment = PP_ALIGN.RIGHT
+    cite = slide.shapes.add_textbox(Emu(9987101), Emu(6463328), Emu(2204899), Emu(307777))
+    p = cite.text_frame.paragraphs[0]
+    p.text = ctx.citation
+    p.font.size = pt(10, F_CITE); p.font.color.rgb = GRAY; p.font.name = FONT
+    p.alignment = PP_ALIGN.RIGHT
+
+
+def key_message(slide, text, y=Emu(1400000), size=14):
+    msg = slide.shapes.add_textbox(Emu(838200), y, Emu(10515600), Emu(500000))
+    msg.text_frame.word_wrap = True
+    p = msg.text_frame.paragraphs[0]
+    p.text = text
+    p.font.size = pt(size, F_KEYMSG); p.font.italic = True
+    p.font.color.rgb = TITLE_BLUE; p.font.name = FONT
+    return msg
+
+
+# ═══════════════════════════════════════════════════
+#  Renderers — one per slide type (render_x(ctx, s, n))
+# ═══════════════════════════════════════════════════
+
+def render_title(ctx, s, n):
+    slide = ctx.prs.slides.add_slide(ctx.layouts["Title Slide"])
+    t = slide.placeholders[0]
+    t.text = s["title"]
+    for para in t.text_frame.paragraphs:
+        para.font.size = Pt(s.get("title_size", 26)); para.font.bold = True
+        para.font.color.rgb = RED; para.font.name = FONT
+    if s.get("subtitle"):
+        sub = slide.placeholders[1]
+        sub.text = s["subtitle"]
+        for para in sub.text_frame.paragraphs:
+            para.font.size = Pt(20); para.font.bold = True
+            para.font.color.rgb = BODY; para.font.name = FONT
+    lines = [ln for ln in [s.get("authors"), s.get("affiliation"), "", s.get("date")]
+             if ln is not None]
+    if lines:
+        box = slide.shapes.add_textbox(Emu(1154187), Emu(4928445), Emu(9340438), Emu(1200329))
+        box.text_frame.word_wrap = True
+        for i, line in enumerate(lines):
+            p = box.text_frame.paragraphs[0] if i == 0 else box.text_frame.add_paragraph()
+            p.text = line
+            p.font.size = Pt(14) if line != s.get("date") else Pt(13)
+            p.font.color.rgb = RGBColor(0x66, 0x66, 0x66); p.font.name = FONT
+            p.alignment = PP_ALIGN.CENTER
+    logo = os.path.join(ctx.skill_root, "references", "Picture_3.x-wmf")
+    if os.path.exists(logo):
+        try:
+            slide.shapes.add_picture(logo, Emu(4790362), Emu(798667), Emu(2266391), Emu(578214))
+        except Exception as e:
+            print("logo skip:", e, file=sys.stderr)
+    return slide
+
+
+def render_bullets(ctx, s, n):
+    slide = ctx.prs.slides.add_slide(ctx.layouts["Title and Content"])
+    slide.placeholders[0].text = s["title"]
+    if s.get("key_message"):
+        key_message(slide, s["key_message"])
+    tf = slide.placeholders[1].text_frame
+    tf.clear()
+    first = True
+    for b in s["bullets"]:
+        p = tf.paragraphs[0] if first else tf.add_paragraph()
+        first = False
+        p.text = b["text"]; p.level = 0
+        p.font.name = FONT; p.font.size = pt(18, F_BODY)
+        if b.get("bold"):
+            p.font.bold = True
+        for sub in b.get("sub", []):
+            ps = tf.add_paragraph()
+            ps.text = sub; ps.level = 1
+            ps.font.name = FONT; ps.font.size = pt(16, F_SUB)
+    add_badge_and_citation(ctx, slide)
+    return slide
+
+
+def render_figure(ctx, s, n):
+    slide = ctx.prs.slides.add_slide(ctx.layouts["Title Only"])
+    slide.placeholders[0].text = s["title"]
+    if s.get("key_message"):
+        key_message(slide, s["key_message"])
+    fig_top = s.get("fig_top", 1950000)
+    max_h = s.get("max_h", 3400000)
+    image_path = s["image"]
+    if not os.path.isabs(image_path):
+        image_path = os.path.join(ctx.images_base, image_path)
+    if Image and os.path.exists(image_path):
+        img = Image.open(image_path); iw, ih = img.size; ratio = iw / ih
+        max_w = Emu(10500000)
+        w = max_w; h = int(w / ratio)
+        if h > max_h:
+            h = max_h; w = int(h * ratio)
+        fig_x = Emu(838200) + (max_w - w) // 2
+        slide.shapes.add_picture(image_path, fig_x, Emu(fig_top), w, h)
+        cap_y = fig_top + h + 120000
+    else:
+        print(f"WARNING: figure image not found: {image_path}", file=sys.stderr)
+        cap_y = fig_top + 200000
+    cap = None
+    for i, line in enumerate(s.get("caption", []) or []):
+        if i == 0:
+            cap = slide.shapes.add_textbox(Emu(838200), Emu(cap_y), Emu(10515600), Emu(900000))
+            cap.text_frame.word_wrap = True
+            p = cap.text_frame.paragraphs[0]
+        else:
+            p = cap.text_frame.add_paragraph()
+        p.text = line; p.font.size = Pt(14); p.font.name = FONT; p.font.color.rgb = BODY
+    add_badge_and_citation(ctx, slide)
+    return slide
