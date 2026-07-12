@@ -2,8 +2,30 @@
 
 **Owner:** Allan (medical oncologist, GI malignancies — Moffitt Cancer Center)
 **Working env:** Claude Code / VS Code + Claude Code
-**Scope:** Three enhancements to my existing PowerPoint-generation skills, sequenced by value-to-effort.
-**Status:** Draft — carry into Claude Code as starting context.
+**Scope:** Enhancements to my existing PowerPoint-generation skills, sequenced by value-to-effort.
+**Status:** Goals 0 and 1 IMPLEMENTED (2026-07-11). Goals 2, 2.5, 3 pending.
+
+## Decisions log (2026-07-11 brainstorm)
+
+1. **Canonical home**: this folder is a git repo → `https://github.com/allanatal/Presentation.git`.
+   Skills sync to both runtimes via `tools/sync-skills.sh` (live copy in `~/.claude/skills/`;
+   `dist/*.skill` zips re-uploaded to the Claude desktop app when skills change).
+   The repo is the ONLY editable source — never edit installed copies.
+2. **QA depth**: filled per-deck checklist PLUS automated deterministic cross-check
+   (`skills/academic-paper-to-pptx/scripts/qa_crosscheck.py`).
+3. **Goal 2.5 added** (Nano Banana Pro conceptual figures) between Goals 2 and 3.
+4. Version reconciliation of the previously diverged copies is documented in
+   `docs/legacy/version-reconciliation-2026-07-11.md` (flagged: CONSORT builder exists
+   only in the legacy PptxGenJS lineage — candidate future port).
+
+## Goal 0 — Consolidation & port (DONE 2026-07-11)
+
+Skills previously lived only in the Claude desktop app with sandbox-only paths
+(`/mnt/skills/...`, `/home/claude/...`) and had no canonical source. Completed: seeded
+repo from the newest installed copies, made SKILL.mds and scripts environment-agnostic
+(shared references resolve relative to script location; `soffice` found via PATH with
+sandbox fallback), switched `extract_figures.py` to Pillow, added `tools/sync-skills.sh`,
+installed both skills into Claude Code, and installed local deps (poppler, LibreOffice).
 
 ---
 
@@ -167,6 +189,55 @@ and QA in my own pipeline.
 
 ---
 
+## Goal 2.5 — Optional AI Figure Generation: Nano Banana Pro (AFTER GOAL 2)
+
+**Model:** Google Nano Banana Pro = Gemini 3 Pro Image (`gemini-3-pro-image-preview`), via the
+Gemini API with a Google AI Studio key (`GEMINI_API_KEY`).
+
+**Purpose:** generate **conceptual/illustrative figures only** — mechanism-of-action cartoons,
+pathway schematics, anatomical illustrations, visual abstracts — to make decks more visually
+appealing. Embedded as editable picture elements via the existing `add_picture()` path, exactly
+like extracted figures.
+
+### Hard scientific-integrity guardrail (NON-NEGOTIABLE)
+
+Nano Banana Pro must **never** generate any figure that represents study data — no KM/survival
+curves, forest plots, waterfall plots, swimmer plots, or any chart with real numbers. Data
+figures come **only** from the source paper (existing extraction path) or are built
+programmatically. Every AI-generated image must be tagged as AI-generated and flagged in the
+Goal 1 QA checklist with an explicit **"contains no data — decorative/conceptual only"**
+confirmation line.
+
+### Access / config
+
+- Paid API path (~$0.13/image at 1K–2K output) so outputs carry only the invisible SynthID
+  watermark, not the visible Gemini watermark. Free Nano Banana Pro access (~3 low-res
+  generations/day) is insufficient for production; the base (non-Pro) Nano Banana free tier
+  (~500 images/day) is not the production target.
+- Env: `GEMINI_API_KEY`.
+
+### Privacy
+
+Cloud service ⇒ prompts must contain **no PHI and no unpublished patient data**. Only
+de-identified/public/conceptual prompts. (Reaffirms the project-wide PHI constraint in § 0.)
+
+### Workflow integration
+
+- Helper script `scripts/generate_figure.py`: takes a text prompt, calls the Nano Banana Pro
+  API, saves a PNG to the figures directory, returns the path for embedding.
+- **Opt-in per figure**: Allan explicitly requests each illustration; the skill never
+  auto-generates images.
+
+### Acceptance criteria
+
+- `generate_figure.py` produces a PNG from a prompt and returns its path.
+- Generated images are tagged AI-generated (filename prefix + QA checklist line) and the QA
+  checklist shows the "contains no data" confirmation for each.
+- Guardrail documented in both SKILL.mds; no data-figure prompts possible through the
+  documented workflow.
+
+---
+
 ## Goal 3 — Template-Extraction Enhancement (DO THIS THIRD)
 
 **Why:** borrow Presenton's *AI-template-from-PPTX* idea and fold a version of it into my
@@ -214,7 +285,7 @@ keeping the true-editability + local-execution advantages my current setup alrea
 ## Suggested Working Method in Claude Code
 - Dedicated worktree/branch for this project; `/clear` between phases with this spec as
   the persistent external memory.
-- Sequence strictly: **Goal 1 → Goal 2 → Goal 3.** Land and use Goal 1 before starting Goal 2.
+- Sequence strictly: **Goal 1 → Goal 2 → Goal 2.5 → Goal 3.** Land and use each before starting the next. (Goals 0–1 landed 2026-07-11.)
 - Keep each goal's changes reviewable in isolation.
 - After each goal: run the QA checklist (Goal 1's own deliverable) on a real deck as the
   regression gate.
