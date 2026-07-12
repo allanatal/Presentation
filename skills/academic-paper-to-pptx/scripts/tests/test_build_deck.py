@@ -74,3 +74,27 @@ def test_unreferenced_lists_unused_ids():
     c = bd.Claims(copy.deepcopy(CLAIMS))
     c.assign("eff-01", 10)
     assert set(c.unreferenced()) == {"eff-03", "dem-01"}
+
+
+# ═══════════ Task 2: recursive spec substitution ═══════════
+
+def test_substitute_in_place_walks_nested_structures():
+    c = bd.Claims(copy.deepcopy(CLAIMS))
+    sdata = {
+        "type": "figure",
+        "key_message": "OS {{eff-01}}",
+        "caption": ["deaths line", "HR is {{eff-03}}"],
+        "rows": [{"label": "Age", "vals": ["{{dem-01}}"]}],
+    }
+    bd.substitute_in_place(sdata, c, slide_no=10)
+    assert sdata["key_message"] == "OS 19.4 months (95% CI 17.1-22.9)"
+    assert sdata["caption"][1] == "HR is HR 0.67 (95% CI 0.50-0.90); P = .01"
+    assert sdata["rows"][0]["vals"][0] == "IP 60 (24-70); PS 56 (23-74)"
+    assert c.referenced == {"eff-01": 10, "eff-03": 10, "dem-01": 10}
+
+
+def test_slide_level_claims_assigned():
+    c = bd.Claims(copy.deepcopy(CLAIMS))
+    sdata = {"type": "table", "claims": ["dem-01"], "rows": []}
+    bd.assign_slide_claims(sdata, c, slide_no=8)
+    assert c.referenced["dem-01"] == 8

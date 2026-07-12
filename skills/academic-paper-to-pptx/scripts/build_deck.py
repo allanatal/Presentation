@@ -120,3 +120,26 @@ class Claims:
 
     def unreferenced(self):
         return [cid for cid in self.by_id if cid not in self.referenced]
+
+
+def substitute_in_place(node, claims, slide_no):
+    """Recursively replace {{id}} tokens in every string within a dict/list tree.
+    Assigns each referenced claim to slide_no. Mutates `node` in place."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if isinstance(v, str):
+                node[k] = claims.substitute(v, slide_no)
+            else:
+                substitute_in_place(v, claims, slide_no)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            if isinstance(v, str):
+                node[i] = claims.substitute(v, slide_no)
+            else:
+                substitute_in_place(v, claims, slide_no)
+
+
+def assign_slide_claims(sdata, claims, slide_no):
+    """Assign every id in a slide's explicit `claims` list to slide_no."""
+    for cid in sdata.get("claims", []):
+        claims.assign(cid, slide_no)
