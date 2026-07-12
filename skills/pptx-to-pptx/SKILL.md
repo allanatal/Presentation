@@ -26,7 +26,7 @@ The bundled scripts resolve the shared references automatically (relative to the
 
 **Shared resources** — this skill references files from the `academic-paper-to-pptx` skill (paths per the table above):
 - `references/template.pptx` — Moffitt slide master
-- `references/slide-builders.md` — python-pptx code patterns
+- `references/slide-builders.md` — renderer reference: font floors, color palette, key EMU dimensions
 - `references/style-spec.md` — colors, positions, font rules
 - `references/qa-checklist.md` — QA workflow and checklist rules
 - `scripts/qa_crosscheck.py` — deterministic QA cross-check (run in Phase 4)

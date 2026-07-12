@@ -11,7 +11,19 @@ Transform a research paper into a professional, oncology-grade PowerPoint presen
 
 This skill uses a **template-based approach**: a bundled `template.pptx` contains the Moffitt slide master (Master 0) with all branding baked in — top bar, bottom 4-color bar, Moffitt badge icon, title formatting with red underline, and bullet styling. Python-pptx opens the template and adds slides using the master's layouts. This gives pixel-perfect style matching with minimal code.
 
-**Key library**: `python-pptx` (not PptxGenJS). All slides are built in Python.
+**Key library**: `python-pptx` (not PptxGenJS).
+
+**Build model (deck-spec → fixed builder).** You do **not** hand-author python-pptx per deck.
+You emit a compact typed **deck spec** (JSON, one entry per slide) that references claim IDs;
+the committed `scripts/build_deck.py` consumes spec + claims and renders the deck. This cuts
+the biggest per-deck token bucket and gives two integrity properties for free:
+- **No sub-floor fonts** — the spec has no font field; sizes live only in `build_deck.py`, all
+  ≥ the style-spec floors.
+- **No hand-typed numbers in code** — prose uses `{{claim-id}}` tokens substituted from the
+  claims file; tables inline values but declare claim IDs, and `qa_crosscheck.py` verifies
+  they landed. The builder auto-fills each claim's `slide` field (you never maintain it).
+
+Schema + one example per slide type: `references/deck-spec.md`.
 
 ## Environments & Paths
 
@@ -97,7 +109,7 @@ Read the full markdown and extract these elements. **Never invent data** — eve
 
 ### Step 1d: Write the Claims File
 
-Persist every number destined for slides to `<deckname>_claims.json` in the working directory, following the schema in `references/qa-checklist.md`. One claim per verifiable statement (HR+CI+p, median, ORR, each Table 1 row, AE %s, arm sizes, NCT). Values verbatim from the paper; `slide` stays `null` until Phase 3. Keep the markdown text (`paper_text.md`) — the QA step uses it for the orphan-number check.
+Persist every number destined for slides to `<deckname>_claims.json` in the working directory, following the schema in `references/qa-checklist.md`. One claim per verifiable statement (HR+CI+p, median, ORR, each Table 1 row, AE %s, arm sizes, NCT). Values verbatim from the paper. Leave `slide` as `null` — Phase 3's builder derives it and writes a `<deckname>_claims_resolved.json` (you don't maintain `slide` by hand). Keep the markdown text (`paper_text.md`) — the QA step uses it for the orphan-number check.
 
 ---
 
@@ -119,112 +131,74 @@ Crop figure regions with Pillow if needed.
 
 ## Phase 3: Build the Presentation
 
-### Template Setup
+You author a **deck spec** (JSON) and run the committed builder. Full schema and one worked
+example per slide type: **`references/deck-spec.md`** — read it before authoring.
 
-Copy the bundled template and open it with python-pptx:
+### Step 3a: Author `<deckname>_deck_spec.json`
 
-```python
-from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
-import shutil, os
+One entry per slide in `slides`, each a typed object (`title` / `bullets` / `table` /
+`figure` / `study_design` / `consort`). A `deck` block holds `study` (badge), `citation`,
+and title-slide metadata. Put the paper's numbers on slides two ways:
+- **`{{claim-id}}` tokens** in prose (key messages, bullets) → substituted from the claims file.
+- **slide-level `"claims": [...]`** on tables / diagrams / figure captions whose numbers are
+  inlined — `qa_crosscheck.py` verifies each declared claim's numbers actually landed.
 
-# Copy template to working directory (resolve <skill-root> per the Environments table)
-SKILL_ROOT = os.path.expanduser("~/.claude/skills/academic-paper-to-pptx")  # or /mnt/skills/user/... in the desktop app
-shutil.copy(os.path.join(SKILL_ROOT, "references/template.pptx"), "output.pptx")
-prs = Presentation("output.pptx")
+**Contract:** every claim in the claims file must be referenced exactly once; `build_deck.py`
+errors otherwise. This *is* the "every claim assigned before QA" rule, enforced mechanically.
 
-# Get Master 0 (Moffitt) layouts
-master = prs.slide_masters[0]
-LAYOUTS = {layout.name: layout for layout in master.slide_layouts}
+Recommended slide order (map each to a spec `type`):
+
+| # | Slide | Spec `type` | Notes |
+|---|-------|-------------|-------|
+| 1 | Title | `title` | Inherits `deck.{title,subtitle,authors,affiliation,date}` |
+| 2 | Research Objective | `bullets` | Research gap + core question |
+| 3–4 | Literature Background | `bullets` | Max 2 slides |
+| 5 | Study Design Diagram | `study_design` | Eligibility → R → arms → endpoints |
+| 6 | Statistical Methods | `bullets` | Quantitative only |
+| 7 | CONSORT Diagram | `consort` | If patient-flow data available |
+| 8–9 | Table 1 (Demographics) | `table` | Exact numbers; split if it would overflow |
+| 10–12 | Primary/Secondary Figures | `figure` | Embed extracted images (Phase 2) |
+| 13 | Safety / AE Table | `table` | Use `note` for footnote lines |
+| 14–16 | Additional Findings | `bullets`/`table`/`figure` | |
+| 17–18 | Discussion / Conclusions | `bullets` | Max 2 slides |
+
+**Data reproduction:** every number must match the publication exactly. Tables are
+auto-centered; if one won't fit, split across two `table` slides — never shrink below the
+floor. Figures embed with preserved aspect ratio (source/extracted figures or programmatic
+charts only — never a full-slide screenshot).
+
+### Step 3b: Run the builder
+
+```bash
+python "<skill-root>/scripts/build_deck.py" <deckname>_deck_spec.json \
+    --claims <deckname>_claims.json --out <deckname>.pptx \
+    --resolved-claims <deckname>_claims_resolved.json
 ```
 
-Available layouts (all inherit Moffitt branding automatically):
-- **`Title Slide`** — Center title + subtitle placeholders
-- **`Title and Content`** — Title + bullet content (most slides)
-- **`Title Only`** — Title placeholder only (study design, figures)
-- **`Two Content`** — Title + two side-by-side content areas (split tables)
-- **`Blank`** — No placeholders (fully custom slides)
+It copies the Moffitt template, renders every slide, substitutes claim tokens, auto-fills each
+claim's `slide` in `<deckname>_claims_resolved.json`, and prints `N/M claims placed`. If it
+reports unreferenced claims, add their references to the spec and re-run.
 
-### What the template gives you for free (DO NOT recreate):
-- Top navy bar
-- Bottom 4-color bar (navy, teal, light blue, green)
-- Moffitt badge icon (top-right)
-- Title formatting (dark blue, bold, with red underline)
-- Bullet formatting with indent levels
+### Font Size Requirements (enforced by the builder)
 
-### What you add manually per slide:
-- Study name text badge (top-right, beside the icon)
-- Citation text (bottom-right)
-- Images, tables, shapes for content
+Hard minimums — the spec has **no font field**, so these are baked into `build_deck.py` and
+cannot be violated from the spec. If content doesn't fit, **split across slides**.
 
-Read `references/slide-builders.md` for complete python-pptx code patterns.
+| Element | Minimum |
+|---------|---------|
+| Body text (bullets level 0) | 18pt |
+| Sub-bullets (level 1) | 16pt |
+| Table cell text (headers + data) | 14pt |
+| Study-design / CONSORT diagram text | 12pt |
+| Key message / italic subtitle | 14pt |
+| Citation text | 10pt (exempt reference element) |
+| Study badge | 11pt (exempt reference element) |
 
-### Presentation Structure
+**Why:** presentations are projected in large rooms; text below 14pt is illegible at distance.
+Citation and badge are reference elements not meant to be read during the talk.
 
-| # | Slide | Layout | Notes |
-|---|-------|--------|-------|
-| 1 | Title | `Title Slide` | Trial name, author, affiliation, date |
-| 2 | Research Objective | `Title and Content` | Research gap + core question |
-| 3–4 | Literature Background | `Title and Content` | Max 2 slides |
-| 5–6 | Hypotheses | `Title and Content` | Quantitative only, max 2 slides |
-| 7 | Study Design Diagram | `Title Only` | **Build with python-pptx shapes** |
-| 8 | Statistical Methods | `Title and Content` | Quantitative only |
-| 9 | CONSORT Diagram | `Title Only` | If patient flow data available |
-| 10 | Table 1 (Demographics) | `Two Content` or `Title Only` | Exact numbers from paper |
-| 11–12 | Primary Endpoint Figures | `Title Only` | **Embed extracted images** |
-| 13 | Safety / AE Table | `Title Only` | Recreate table or embed chart |
-| 14–16 | Additional Findings | varies | Max 3 slides |
-| 17–18 | Discussion | `Title and Content` | Max 2 slides |
-
-### Study Design Diagram — Always Programmatic
-
-Build with python-pptx shapes on a `Title Only` slide. Components:
-- Left rounded rect: eligibility criteria
-- Center circle: randomization ratio + N
-- Right: treatment arm boxes (colored by arm)
-- Far right: endpoints box
-- Arrows connecting flow
-- Bottom: treatment duration, NCT number
-
-See `references/slide-builders.md` § "Study Design Diagram" for full code.
-
-### Tables — Exact Data Reproduction
-
-Use `slide.shapes.add_table()` for demographics and safety tables. Requirements:
-- Column headers colored to match treatment arms
-- **Every number must match the publication exactly**
-- Split wide tables across two sub-tables on one slide
-- **Tables must be horizontally centered** on the slide. Calculate: `table_x = (slide_width - total_table_width) // 2` where slide width = 12,192,000 EMU
-- If a table has too many rows to fit at 16pt, split across two slides rather than shrinking below 14pt
-
-### Font Size Requirements (MANDATORY)
-
-These are hard minimums — never go below them regardless of content density. If content doesn't fit, **split across multiple slides** rather than shrinking fonts.
-
-| Element | Preferred | Minimum | Notes |
-|---------|-----------|---------|-------|
-| **"Title and Content" body text (level 0)** | 18pt | 18pt | Main bullet points |
-| **"Title and Content" sub-bullets (level 1)** | 16pt | 16pt | Indented sub-points |
-| **Table cell text (headers)** | 16pt | 14pt | Column headers, row labels |
-| **Table cell text (data)** | 16pt | 14pt | All data values |
-| **Study design diagram text** | 14pt | 12pt | Eligibility, arms, endpoints, labels |
-| **Key message / subtitle** | 14pt | 14pt | Italic text below slide title |
-| **Conclusion key finding** | 18pt | 18pt | First bold bullet on conclusion |
-| **Conclusion sub-bullets** | 14pt | 14pt | Supporting points |
-| **Citation text** | 10pt | 10pt | Bottom-right reference (exception to minimum) |
-| **Study badge** | 11pt | 11pt | Top-right study name (exception to minimum) |
-
-**Why these sizes matter**: Presentations are projected in large rooms. Text below 14pt becomes illegible at typical viewing distances. The only exceptions are citation and badge text, which are reference elements not meant to be read during the talk.
-
-### Figures — Embed Extracted Images
-
-Use `slide.shapes.add_picture()` with extracted images from Phase 2. Always calculate aspect ratio to avoid distortion.
-
-### Claims Bookkeeping
-
-As each slide is built, fill in the `slide` number of every claim it carries in `<deckname>_claims.json`. Every claim must be assigned before Phase 4.
+`references/slide-builders.md` documents what each renderer draws (colors, positions, layouts)
+if you need to adjust `build_deck.py` itself.
 
 ---
 
@@ -251,31 +225,36 @@ pdftoppm -jpeg -r 150 output.pdf slide
 Read `references/qa-checklist.md`, then run:
 
 ```bash
-python "<skill-root>/scripts/qa_crosscheck.py" output.pptx \
-    --claims <deckname>_claims.json --mode paper --source-text paper_text.md
+python "<skill-root>/scripts/qa_crosscheck.py" <deckname>.pptx \
+    --claims <deckname>_claims_resolved.json --mode paper --source-text paper_text.md
 ```
 
-The script exits non-zero on any ❌ (claim number missing from its slide, orphan number not in the source, unresolved `[CHECK]`, font below floors, full-slide image). **Fix every ❌ and re-run until clean.** The deck is delivered **together with** its `<deckname>_QA.md`; the remaining MANUAL lines are the user's eyeball pass against the source.
+Use the **resolved** claims file (`build_deck.py` filled in each claim's `slide`). The script
+exits non-zero on any ❌ (claim number missing from its slide, orphan number not in the source,
+unresolved `[CHECK]`, font below floors, full-slide image). **Fix every ❌ and re-run until
+clean.** The deck is delivered **together with** its `<deckname>_QA.md`; the remaining MANUAL
+lines are the user's eyeball pass against the source.
 
 ---
 
 ## Common Pitfalls
 
-- **Inventing data**: Never fill in numbers not in the paper — use `[CHECK]` placeholders
-- **Overcrowded slides**: Split dense content across multiple slides
-- **Table column widths**: Test with real data — narrow columns cause wrapping
-- **Figure aspect ratios**: Always calculate from original image dimensions
-- **Study design complexity**: Adapt diagram layout for 2-arm, 3-arm, 4+ arm, crossover
-- **Title slide styling**: The `Title Slide` layout uses default placeholder formatting — override font color/size for the trial name (see slide-builders.md)
+- **Inventing data**: Never put a number in the spec that isn't in the paper — every claim value comes from the source; use `[CHECK]` placeholders for anything uncertain.
+- **Unreferenced claims**: `build_deck.py` errors if any claim is never placed. Reference each via a `{{claim-id}}` token or a slide-level `"claims"` list — don't silence it with `--allow-unreferenced`.
+- **Overcrowded slides**: Split dense content across multiple `bullets`/`table` slides rather than cramming — the font floors are enforced and cannot be shrunk to fit.
+- **Wrong figure image path**: `image` is resolved relative to `--images-base` (default: the spec's directory). The builder warns if the file is missing.
+- **Study design / CONSORT complexity**: The renderers cover 2–3 arms with the standard topology. For an exotic flow (crossover, 4+ arms, non-standard CONSORT), render it as a `figure` from a pre-made image instead.
 
 ## Reference Files
 
 | File | Purpose |
 |------|-------------|
+| `references/deck-spec.md` | **Deck-spec JSON schema** + one example per slide type (author from this) |
 | `references/template.pptx` | Moffitt slide master template (open with python-pptx) |
-| `references/slide-builders.md` | Python-pptx code patterns for every slide type |
+| `references/slide-builders.md` | What each `build_deck.py` renderer draws (colors, positions, layouts) |
 | `references/style-spec.md` | Quick reference for colors, positions, and manual elements |
 | `references/qa-checklist.md` | QA workflow, claims-file schema, checklist rules |
 | `references/Picture_3.x-wmf` | Moffitt Cancer Center logo (for title slide) |
+| `scripts/build_deck.py` | **Committed builder**: deck spec + claims → editable Moffitt PPTX |
 | `scripts/extract_figures.py` | Extract images from PDF papers |
 | `scripts/qa_crosscheck.py` | Deterministic QA cross-check (shared with pptx-to-pptx) |
