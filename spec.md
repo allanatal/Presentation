@@ -3,10 +3,12 @@
 **Owner:** Allan (medical oncologist, GI malignancies — Moffitt Cancer Center)
 **Working env:** Claude Code / VS Code + Claude Code
 **Scope:** Enhancements to my existing PowerPoint-generation skills, sequenced by value-to-effort.
-**Status:** Goals 0 and 1 IMPLEMENTED (2026-07-11); synthetic + mechanical round-trips verified.
-Pending before Goal 2: regression gate — build a deck from a real public open-access oncology
-RCT with `academic-paper-to-pptx` and confirm its `_QA.md` comes out clean. Desktop-app copies
-are one version behind until `dist/*.skill` is re-uploaded via the app UI. Goals 2, 2.5, 3 pending.
+**Status:** Goals 0 and 1 IMPLEMENTED and VERIFIED. Regression gate PASSED (2026-07-12):
+DRAGON-01 (JAMA Oncology, 71 claims) built in a cold session → `_QA.md` came out 71 ✅ / 0 ❌ /
+4 ⚠️ (all legitimate figure-picture confirmations). Desktop-app copies are one version behind
+until `dist/*.skill` is re-uploaded via the app UI. Goals 2, 2.5, 3 pending, plus a new
+cross-cutting **Token Efficiency & Multi-Model Routing** section (added 2026-07-12; recommends
+a deck-spec→builder refactor to cut per-deck token cost — one deck ≈ 30% of a plan session).
 
 ## Decisions log (2026-07-11 brainstorm)
 
@@ -147,9 +149,9 @@ QA phase in both skills.
 
 **Why:** Presenton is an open-source (Apache-2.0), self-hostable AI presentation
 generator that exports **editable PPTX**, can build a reusable template **from my own
-PPTX**, runs locally (Docker / desktop), works with my Anthropic key **or** a local
-Ollama model, and ships a **built-in MCP server**. It's the best external match to my
-needs and slots into the Claude Code / MCP workflow directly.
+PPTX**, runs locally (Docker / desktop), works with my Anthropic key, a local
+Ollama model, **or an OpenAI/ChatGPT API key**, and ships a **built-in MCP server**. It's
+the best external match to my needs and slots into the Claude Code / MCP workflow directly.
 
 **Role in my workflow:** a *fast first-draft engine for generic / public-data decks* —
 not a replacement for my accuracy-critical skill path. Draft in Presenton, then finish
@@ -159,10 +161,13 @@ and QA in my own pipeline.
 1. **Stand up Presenton locally.**
    - Docker: `docker run -it --name presenton -p 5000:80 -v "./app_data:/app_data" ghcr.io/presenton/presenton:latest`
      (or the desktop app). Confirm the UI at `http://localhost:5000`.
-   - Configure provider via env: for de-identified/public work, `LLM=anthropic` +
-     `ANTHROPIC_API_KEY`; for maximum privacy, `LLM=ollama` with a local model
-     (`OLLAMA_MODEL`, `START_OLLAMA`). Set `IMAGE_PROVIDER` appropriately (e.g. `pexels`
-     with a key, or disable image generation).
+   - Configure provider via env — three options available:
+     - `LLM=anthropic` + `ANTHROPIC_API_KEY` (de-identified/public work),
+     - `LLM=openai` + `OPENAI_API_KEY` (de-identified/public work; I have a ChatGPT/OpenAI key),
+     - `LLM=ollama` + `OLLAMA_MODEL` / `START_OLLAMA` (maximum privacy, fully local).
+     Cloud providers (anthropic/openai) are for de-identified/public content ONLY; reserve
+     Ollama for anything more sensitive (still no true PHI, per § 0). Set `IMAGE_PROVIDER`
+     appropriately (e.g. `pexels` with a key, or disable image generation).
    - Note the single-admin auth model (`AUTH_USERNAME` / `AUTH_PASSWORD`) — needed for API/MCP.
 2. **Wire Presenton's MCP server into Claude Code.**
    - Add the Presenton MCP server to my Claude Code MCP config.
@@ -238,6 +243,67 @@ de-identified/public/conceptual prompts. (Reaffirms the project-wide PHI constra
   checklist shows the "contains no data" confirmation for each.
 - Guardrail documented in both SKILL.mds; no data-figure prompts possible through the
   documented workflow.
+
+---
+
+## Cross-cutting — Token Efficiency & Multi-Model Routing
+
+**Motivating observation (2026-07-12):** building ONE deck (DRAGON-01, JAMA Oncology,
+71 claims) consumed ~30% of a Claude plan session. Diagnosis from the build artifacts:
+the model authored a **28 KB bespoke `build_dragon01.py`** by hand — hundreds of
+python-pptx calls with every number inline. That single generation is the largest
+token bucket, ahead of (2) reading the 50 KB paper markdown to extract 71 exact claims,
+and (3) vision tokens for visual QA of rendered slides.
+
+**Already offloaded to deterministic scripts (zero model tokens)** — the Goal 1 work:
+markitdown ingest, `extract_figures.py`, `qa_crosscheck.py` numeric verification,
+`soffice`/`pdftoppm` rendering. The numeric QA that used to be model eyeballing is now free.
+
+**Hard guardrail (governs all routing below):** the accuracy-critical step — reading the
+paper and extracting exact claims (HRs, CIs, medians, Table 1) — **stays on the strongest
+model**. Never route claim extraction to a small/local model; a misread hazard ratio is the
+exact failure this project exists to prevent. `qa_crosscheck.py` verifies every deck
+regardless of which model built it, so downstream mechanical steps are safe to offload.
+
+### Options, ranked by value-to-effort
+
+1. **Deck-spec → fixed builder (RECOMMENDED — biggest win, no new dependency).**
+   Stop having the model hand-author python-pptx per deck. The model emits a compact
+   **deck spec** (JSON: ordered, typed slides — title/bullets/table/figure/study-design —
+   referencing claim IDs in the existing claims JSON). A single committed `build_deck.py`
+   consumes spec + claims → deck. Cuts the ~28 KB code generation to ~5–8 KB of structured
+   data, and makes builds deterministic/reproducible. This converges with `pptx-to-pptx`'s
+   existing `parsed.json → build_from_parsed.py` pattern and with Goal 3 (parameter-driven
+   builders) — so it is largely shared work, not net-new. **Do this first; it needs no
+   external model and *improves* accuracy (no hand-typed numbers).**
+2. **Delegate mechanical build to Codex (uses the OpenAI/ChatGPT key).** With the Codex
+   plugin for Claude Code (`https://github.com/openai/codex-plugin-cc`; commands
+   `/codex:setup`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review`,
+   `/codex:transfer`, `/codex:status`, `/codex:result`, `/codex:cancel`; subagent
+   `codex:codex-rescue`; needs Codex CLI + Node ≥18.18 + ChatGPT login or OpenAI key),
+   Claude does the accuracy-critical extraction, then `/codex:rescue` delegates "build the
+   deck from this deck-spec + claims JSON and run qa_crosscheck.py" to Codex — running on the
+   ChatGPT/OpenAI plan, not the Claude plan. Guardrail: Codex works ONLY from the claims JSON
+   (never invents numbers); Claude's `qa_crosscheck.py` gates the result. Best paired with
+   option 1 (Codex generates less when the target is a spec, not raw code). Can also use
+   `/codex:review` / `/codex:adversarial-review` as a second-opinion review of skill code.
+3. **Presenton first-draft for narrative/generic decks (= Goal 2).** For non-data-critical
+   or generic/public decks, draft the whole thing in Presenton (Ollama local, or Anthropic/
+   OpenAI key) and finish + QA in the Moffitt pipeline. Not a fit for data-dense papers like
+   DRAGON-01 (Presenton can't be trusted with exact tables), but it moves the entire draft
+   off the Claude plan when the content allows.
+4. **Offload narrative prose only.** Background / discussion / limitations bullets (wording
+   matters, numbers don't) could be drafted by a cheaper/local model or Codex, while claims
+   and data slides stay on Claude. Lower value than 1–2; revisit only if still constrained.
+
+**What NOT to do:** route claim extraction or data-table construction to Ollama/a small
+model. Accuracy over token savings, always.
+
+### Sequencing note
+
+Option 1 is the highest-leverage and is effectively a down-payment on Goal 3 — consider
+pulling it forward (before or alongside Goal 2). Options 2–3 depend on external tooling
+(Codex CLI, Presenton) and Allan's keys.
 
 ---
 
