@@ -7,9 +7,10 @@
 fixed builder) IMPLEMENTED and VERIFIED 2026-07-12** (pulled ahead of Goal 2): DRAGON-01
 rebuilt from a 14.5 KB deck spec via the committed `scripts/build_deck.py` → `_QA.md` 71 ✅ /
 0 ❌ / 4 ⚠️, identical to the original hand-authored (28 KB) builder's gate. Regression gate
-still PASSES. Desktop-app copies are one version behind until `dist/*.skill` is re-uploaded via
-the app UI. Goals 2, 2.5, 3 pending. See the **Token Efficiency & Multi-Model Routing** section
-below (option 1 done; options 2–4 open).
+still PASSES. **Goal 2 (Presenton MCP) IMPLEMENTED and VERIFIED 2026-07-12** — see
+`docs/presenton-workflow.md`. Desktop-app copies are one version behind until `dist/*.skill`
+is re-uploaded via the app UI. Goals 2.5, 3 pending. See the **Token Efficiency & Multi-Model
+Routing** section below (option 1 done; options 2–4 open — option 3 = this Goal 2).
 
 ## Decisions log (2026-07-11 brainstorm)
 
@@ -190,11 +191,23 @@ and QA in my own pipeline.
 - Presenton supports charts/tables/images but they must be **specified during template
   creation**, not generated freely per slide — factor this into what I expect from it.
 
-### Acceptance criteria
-- Presenton runs locally and is reachable from Claude Code via MCP.
-- I can generate a draft PPTX end-to-end from Claude Code.
-- A Presenton draft successfully passes through `pptx-to-pptx` into the Moffitt template.
-- A short `docs/presenton-workflow.md` records setup, env vars used, and the handoff steps.
+### Acceptance criteria — ALL MET 2026-07-12
+- ✅ Presenton runs locally (Docker Desktop, container `presenton` on port **5001** — :5000 is
+  taken by macOS AirPlay) and is reachable from Claude Code via MCP (`/mcp`, bearer auth;
+  tools `generate_presentation`, `templates_list`; `claude mcp list` → ✔ Connected).
+- ✅ Draft PPTX generated end-to-end via `POST /api/v1/ppt/presentation/generate`
+  (`export_as:"pptx"`) — 5-slide public deck on host Ollama `qwen2.5:32b` (~6.5 min), confirmed
+  **editable** (35 real text shapes, 0 full-slide images).
+- ✅ Passed through `pptx-to-pptx` into the Moffitt template (images stripped, semantic
+  heading/detail rebuild) → `qa_crosscheck` **9 ✅ / 0 ❌ / 1 ⚠** (⚠ = intentionally dropped
+  title-slide `[Your Name]`/date placeholder).
+- ✅ `docs/presenton-workflow.md` records setup, all-3-provider env vars, MCP wiring, REST path,
+  and the handoff + "what Presenton drafts well vs. needs python-pptx" guidance.
+
+**Config recorded** (`~/presenton/`, outside Dropbox; `presenton.env` chmod 600, not in git):
+`CAN_CHANGE_KEYS=true` so anthropic / openai / ollama are switchable live per Allan's request;
+`DISABLE_IMAGE_GENERATION=true` (Presenton still inserts decorative placeholder graphics — the
+handoff strips them). Cloud providers = de-identified/public content only (spec §0).
 
 ---
 

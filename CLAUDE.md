@@ -61,3 +61,14 @@ their shared QA tooling. Remote: https://github.com/allanatal/Presentation.git
   deck spec has no font-size field at all, so a sub-floor font is unrepresentable; sizes live
   only in `build_deck.py` (all clamped via `pt(size, floor)`). Prefer designing a whole bug
   class out of the input format over re-checking for it downstream.
+- 2026-07-12 — Goal 2 (Presenton) environment gotchas: (1) macOS **AirPlay Receiver / Control
+  Center listens on :5000**, so the upstream `-p 5000:80` silently collides — use **5001**.
+  (2) `brew install --cask docker-desktop` needs sudo for `/usr/local/bin` symlinks; a
+  background/non-interactive run fails with "a terminal is required" — pass a GUI `SUDO_ASKPASS`
+  helper (osascript password dialog) so the password reaches sudo's stdin only, never chat.
+  (3) `docker` CLI is at `/usr/local/bin/docker`, not on the default PATH here — prepend it.
+  (4) Presenton `DISABLE_IMAGE_GENERATION=true` still inserts decorative placeholder graphics;
+  the pptx-to-pptx handoff must strip ALL images. (5) Reconstructing a Presenton draft: detect
+  headings by SHAPE (short, no terminal period), not absolute font pt — Presenton sizes text
+  inconsistently slide-to-slide (15 pt vs 13.5 pt headings), and a fixed pt threshold silently
+  flattened Phase III to a bullet list until switched to shape+per-slide-relative detection.
