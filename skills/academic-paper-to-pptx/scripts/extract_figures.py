@@ -3,7 +3,7 @@
 Extract figures from a research paper PDF.
 
 Usage:
-    python extract_figures.py paper.pdf /home/claude/figures/
+    python extract_figures.py paper.pdf figures/
 
 Extracts embedded raster images and filters out small logos/icons.
 Real figures (KM curves, forest plots, bar charts) are typically >50KB
@@ -15,6 +15,8 @@ import os
 import subprocess
 import json
 from pathlib import Path
+
+from PIL import Image
 
 
 def extract_raster_images(pdf_path, output_dir):
@@ -52,16 +54,9 @@ def filter_figures(image_paths, min_width=400, min_height=400, min_bytes=50000):
 
         # Get image dimensions
         try:
-            result = subprocess.run(
-                ["identify", "-format", "%wx%h", str(img_path)],
-                capture_output=True, text=True, check=True
-            )
-            dims = result.stdout.strip()
-            if "x" in dims:
-                w, h = map(int, dims.split("x"))
-            else:
-                w, h = 0, 0
-        except (subprocess.CalledProcessError, ValueError):
+            with Image.open(img_path) as img:
+                w, h = img.size
+        except Exception:
             w, h = 0, 0
 
         info = {
@@ -137,7 +132,7 @@ def main():
         print("\n⚠️  No large figures found via raster extraction.")
         print("    The paper may use vector-drawn figures (matplotlib, R, Excel).")
         print("    Use pdftoppm to rasterize specific pages instead:")
-        print("    pdftoppm -png -r 300 -f <PAGE> -l <PAGE> paper.pdf /home/claude/figures/vector_fig")
+        print("    pdftoppm -png -r 300 -f <PAGE> -l <PAGE> paper.pdf figures/vector_fig")
 
 
 if __name__ == "__main__":

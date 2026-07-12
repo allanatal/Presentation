@@ -13,10 +13,21 @@ This skill **parses an existing .pptx** (the "source"), extracts its content **e
 
 **Key library**: `python-pptx` for both reading and writing.
 
-**Shared resources** — this skill references files from the `academic-paper-to-pptx` skill:
-- `/mnt/skills/user/academic-paper-to-pptx/references/template.pptx` — Moffitt slide master
-- `/mnt/skills/user/academic-paper-to-pptx/references/slide-builders.md` — python-pptx code patterns
-- `/mnt/skills/user/academic-paper-to-pptx/references/style-spec.md` — colors, positions, font rules
+## Environments & Paths
+
+This skill runs in two environments. The sibling `academic-paper-to-pptx` skill is always installed alongside it:
+
+| Environment | This skill's root | Shared references |
+|---|---|---|
+| Claude Code (local machine) | `~/.claude/skills/pptx-to-pptx/` | `~/.claude/skills/academic-paper-to-pptx/references/` |
+| Claude desktop app (sandbox) | `/mnt/skills/user/pptx-to-pptx/` | `/mnt/skills/user/academic-paper-to-pptx/references/` |
+
+The bundled scripts resolve the shared references automatically (relative to their own location; override with `MOFFITT_REFS_DIR`). Write outputs to the user's working directory, never a temp path.
+
+**Shared resources** — this skill references files from the `academic-paper-to-pptx` skill (paths per the table above):
+- `references/template.pptx` — Moffitt slide master
+- `references/slide-builders.md` — python-pptx code patterns
+- `references/style-spec.md` — colors, positions, font rules
 
 **Always read both `slide-builders.md` and `style-spec.md` before writing any code.** They contain the authoritative font sizes, color values, and positioning constants.
 
@@ -47,7 +58,9 @@ A slide with 5 elements — a title, two tables, a textbox, and a conclusion sha
 pip install python-pptx Pillow --break-system-packages
 ```
 
-Read the pptx skill at `/mnt/skills/public/pptx/SKILL.md` for QA workflow and image conversion utilities.
+Also required on PATH: `pdftoppm` (poppler) and LibreOffice `soffice` for rasterization/QA rendering (macOS: `brew install poppler && brew install --cask libreoffice`).
+
+Desktop app only: the generic pptx skill at `/mnt/skills/public/pptx/SKILL.md` provides extra QA/image utilities (thumbnail.py, extract-text). Locally, use `soffice` + `pdftoppm` and this skill's `scripts/parse_pptx.py` instead.
 
 ---
 
@@ -67,13 +80,13 @@ Read the pptx skill at `/mnt/skills/public/pptx/SKILL.md` for QA workflow and im
 Generate thumbnails of the source to understand the deck at a glance:
 
 ```bash
-python /mnt/skills/public/pptx/scripts/thumbnail.py /path/to/source.pptx
-```
+# Local: render pages with soffice + pdftoppm
+soffice --headless --convert-to pdf source.pptx
+pdftoppm -jpeg -r 100 source.pdf src_thumb
+# Desktop app: python /mnt/skills/public/pptx/scripts/thumbnail.py source.pptx
 
-View the thumbnail grid, then also extract text:
-
-```bash
-extract-text /path/to/source.pptx
+# Text overview (per-slide summary printed to stderr)
+python "<skill-root>/scripts/parse_pptx.py" source.pptx --output parsed.json
 ```
 
 ### Step 1b: Extract Content with python-pptx
@@ -198,7 +211,7 @@ def extract_shape(shape, slide_idx):
         ext = image.content_type.split("/")[-1]
         if ext == "jpeg":
             ext = "jpg"
-        img_path = f"/home/claude/source_images/slide{slide_idx}_{shape.name}.{ext}"
+        img_path = f"source_images/slide{slide_idx}_{shape.name}.{ext}"
         os.makedirs(os.path.dirname(img_path), exist_ok=True)
         with open(img_path, "wb") as f:
             f.write(image.blob)
@@ -295,8 +308,9 @@ First, rasterize the source slides that contain shapes needing rasterization:
 
 ```bash
 # Convert source to PDF, then rasterize affected slides at 300 DPI
-python /mnt/skills/public/pptx/scripts/office/soffice.py --headless --convert-to pdf source.pptx
-pdftoppm -jpeg -r 300 -f <SLIDE_NUM> -l <SLIDE_NUM> source.pdf /home/claude/source_images/raster_slide
+# (desktop app: python /mnt/skills/public/pptx/scripts/office/soffice.py instead of soffice)
+soffice --headless --convert-to pdf source.pptx
+pdftoppm -jpeg -r 300 -f <SLIDE_NUM> -l <SLIDE_NUM> source.pdf source_images/raster_slide
 ```
 
 Then crop **only the specific shape's region** using its EMU position:
@@ -432,15 +446,16 @@ from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
-import shutil
+import shutil, os
 
-# Read shared references first:
-# view /mnt/skills/user/academic-paper-to-pptx/references/slide-builders.md
-# view /mnt/skills/user/academic-paper-to-pptx/references/style-spec.md
+# Read shared references first (resolve per the Environments & Paths table):
+# view <shared-refs>/slide-builders.md
+# view <shared-refs>/style-spec.md
 
-TEMPLATE = "/mnt/skills/user/academic-paper-to-pptx/references/template.pptx"
-shutil.copy(TEMPLATE, "/home/claude/output.pptx")
-prs = Presentation("/home/claude/output.pptx")
+REFS = os.path.expanduser("~/.claude/skills/academic-paper-to-pptx/references")  # or /mnt/skills/user/academic-paper-to-pptx/references
+TEMPLATE = os.path.join(REFS, "template.pptx")
+shutil.copy(TEMPLATE, "output.pptx")
+prs = Presentation("output.pptx")
 
 master = prs.slide_masters[0]
 LAYOUTS = {l.name: l for l in master.slide_layouts}
@@ -816,7 +831,8 @@ def add_badge_and_citation(slide, study_name="", citation_text=""):
 ## Phase 4: QA
 
 ```bash
-python /mnt/skills/public/pptx/scripts/office/soffice.py --headless --convert-to pdf output.pptx
+# (desktop app: python /mnt/skills/public/pptx/scripts/office/soffice.py instead of soffice)
+soffice --headless --convert-to pdf output.pptx
 rm -f slide-*.jpg
 pdftoppm -jpeg -r 150 output.pdf slide
 ls -1 "$PWD"/slide-*.jpg

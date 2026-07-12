@@ -12,6 +12,7 @@ Usage:
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -23,7 +24,26 @@ from parse_pptx import parse_presentation
 from build_from_parsed import build_presentation
 
 
-SOFFICE = "/mnt/skills/public/pptx/scripts/office/soffice.py"
+def find_soffice():
+    """Locate a LibreOffice conversion entry point.
+
+    Returns a command-list prefix, or None if LibreOffice is unavailable.
+    Prefers the Claude desktop-app sandbox helper when present, otherwise
+    the local soffice binary (PATH, then the macOS app bundle).
+    """
+    sandbox_helper = "/mnt/skills/public/pptx/scripts/office/soffice.py"
+    if os.path.exists(sandbox_helper):
+        return ["python3", sandbox_helper]
+    soffice = shutil.which("soffice")
+    if soffice:
+        return [soffice]
+    mac_soffice = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+    if os.path.exists(mac_soffice):
+        return [mac_soffice]
+    return None
+
+
+SOFFICE_CMD = find_soffice()
 
 
 def rasterize_slides(source_pptx, parsed_data, images_dir):
@@ -39,10 +59,16 @@ def rasterize_slides(source_pptx, parsed_data, images_dir):
 
     print(f"Rasterizing {len(slides_to_rasterize)} slides with charts/diagrams...", file=sys.stderr)
 
+    if SOFFICE_CMD is None:
+        print("WARNING: LibreOffice (soffice) not found — cannot rasterize chart/diagram "
+              "slides. Install it (e.g. `brew install --cask libreoffice`) and re-run.",
+              file=sys.stderr)
+        return
+
     # Convert source to PDF
     pdf_path = os.path.join(images_dir, "source.pdf")
     result = subprocess.run(
-        ["python3", SOFFICE, "--headless", "--convert-to", "pdf", source_pptx],
+        SOFFICE_CMD + ["--headless", "--convert-to", "pdf", source_pptx],
         capture_output=True, text=True, cwd=images_dir,
     )
 
@@ -85,10 +111,10 @@ def rasterize_slides(source_pptx, parsed_data, images_dir):
 def main():
     parser = argparse.ArgumentParser(description="Convert a PPTX to Moffitt template style")
     parser.add_argument("source", help="Path to source .pptx file")
-    parser.add_argument("--output", "-o", default="/home/claude/output.pptx", help="Output PPTX path")
+    parser.add_argument("--output", "-o", default="output.pptx", help="Output PPTX path")
     parser.add_argument("--study-name", default="", help="Study name for badge")
     parser.add_argument("--citation", default="", help="Citation text for footer")
-    parser.add_argument("--images-dir", default="/home/claude/source_images", help="Working directory for images")
+    parser.add_argument("--images-dir", default="source_images", help="Working directory for images")
     parser.add_argument("--parsed-json", default=None, help="Save/load parsed JSON (skip re-parsing)")
     args = parser.parse_args()
 
@@ -136,7 +162,8 @@ def main():
     print(f"  Images: {args.images_dir}", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     print(f"\nQA: Run the following to visually inspect:", file=sys.stderr)
-    print(f"  python3 {SOFFICE} --headless --convert-to pdf {args.output}", file=sys.stderr)
+    soffice_hint = " ".join(SOFFICE_CMD) if SOFFICE_CMD else "soffice"
+    print(f"  {soffice_hint} --headless --convert-to pdf {args.output}", file=sys.stderr)
     print(f"  pdftoppm -jpeg -r 150 {os.path.splitext(args.output)[0]}.pdf slide", file=sys.stderr)
 
 

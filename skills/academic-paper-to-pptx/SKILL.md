@@ -13,6 +13,17 @@ This skill uses a **template-based approach**: a bundled `template.pptx` contain
 
 **Key library**: `python-pptx` (not PptxGenJS). All slides are built in Python.
 
+## Environments & Paths
+
+This skill runs in two environments. All paths below are relative to the **skill root** (the directory containing this SKILL.md):
+
+| Environment | Skill root |
+|---|---|
+| Claude Code (local machine) | `~/.claude/skills/academic-paper-to-pptx/` |
+| Claude desktop app (sandbox) | `/mnt/skills/user/academic-paper-to-pptx/` |
+
+Write outputs (deck, figures, claims/QA files) to the user's working directory — never a temp path — and print the output paths at the end. In the desktop-app sandbox, `/home/claude/` is the working directory.
+
 ## Workflow — Four Phases
 
 1. **Ingest** — Convert the paper to markdown, then deeply analyze it
@@ -26,7 +37,9 @@ This skill uses a **template-based approach**: a bundled `template.pptx` contain
 pip install markitdown python-pptx pdfplumber Pillow --break-system-packages
 ```
 
-Read the pptx skill at `/mnt/skills/public/pptx/SKILL.md` for QA workflow and image conversion utilities.
+Also required on PATH: `pdftoppm`/`pdfimages` (poppler) and LibreOffice `soffice` for QA rendering (macOS: `brew install poppler && brew install --cask libreoffice`).
+
+Desktop app only: the generic pptx skill at `/mnt/skills/public/pptx/SKILL.md` provides extra QA/image utilities. Locally, use `soffice` + `pdftoppm` directly (see Phase 4).
 
 ---
 
@@ -87,13 +100,13 @@ Read the full markdown and extract these elements. **Never invent data** — eve
 ## Phase 2: Extract Figures from PDF
 
 ```bash
-python /path/to/skill/scripts/extract_figures.py paper.pdf /home/claude/figures/
+python "<skill-root>/scripts/extract_figures.py" paper.pdf figures/
 ```
 
 Filters out small images (<400px or <50KB). For vector figures that `pdfimages` misses:
 
 ```bash
-pdftoppm -png -r 300 -f <PAGE> -l <PAGE> paper.pdf /home/claude/figures/vector_fig
+pdftoppm -png -r 300 -f <PAGE> -l <PAGE> paper.pdf figures/vector_fig
 ```
 
 Crop figure regions with Pillow if needed.
@@ -111,11 +124,12 @@ from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
-import shutil
+import shutil, os
 
-# Copy template to working directory
-shutil.copy("/path/to/skill/references/template.pptx", "/home/claude/output.pptx")
-prs = Presentation("/home/claude/output.pptx")
+# Copy template to working directory (resolve <skill-root> per the Environments table)
+SKILL_ROOT = os.path.expanduser("~/.claude/skills/academic-paper-to-pptx")  # or /mnt/skills/user/... in the desktop app
+shutil.copy(os.path.join(SKILL_ROOT, "references/template.pptx"), "output.pptx")
+prs = Presentation("output.pptx")
 
 # Get Master 0 (Moffitt) layouts
 master = prs.slide_masters[0]
@@ -209,7 +223,9 @@ Use `slide.shapes.add_picture()` with extracted images from Phase 2. Always calc
 ## Phase 4: QA
 
 ```bash
-python /mnt/skills/public/pptx/scripts/office/soffice.py --headless --convert-to pdf output.pptx
+# Local: soffice on PATH (macOS fallback: /Applications/LibreOffice.app/Contents/MacOS/soffice)
+# Desktop app: python /mnt/skills/public/pptx/scripts/office/soffice.py instead of soffice
+soffice --headless --convert-to pdf output.pptx
 rm -f slide-*.jpg
 pdftoppm -jpeg -r 150 output.pdf slide
 ```

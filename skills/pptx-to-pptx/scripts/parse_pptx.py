@@ -3,7 +3,7 @@
 Parse a source .pptx and output structured JSON describing each slide's content.
 
 Usage:
-    python parse_pptx.py source.pptx [--output parsed.json] [--images-dir /home/claude/source_images]
+    python parse_pptx.py source.pptx [--output parsed.json] [--images-dir source_images]
 
 Output: JSON array where each element represents a slide with:
 - index: slide number (0-based)
@@ -258,7 +258,7 @@ def main():
     )
     parser.add_argument(
         "--images-dir",
-        default="/home/claude/source_images",
+        default="source_images",
         help="Directory to save extracted images",
     )
     args = parser.parse_args()

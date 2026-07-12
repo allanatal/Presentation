@@ -13,8 +13,9 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 import shutil, os
 
-shutil.copy("/path/to/skill/references/template.pptx", "/home/claude/output.pptx")
-prs = Presentation("/home/claude/output.pptx")
+SKILL_ROOT = os.path.expanduser("~/.claude/skills/academic-paper-to-pptx")  # or /mnt/skills/user/... in the desktop app
+shutil.copy(os.path.join(SKILL_ROOT, "references/template.pptx"), "output.pptx")
+prs = Presentation("output.pptx")
 
 master = prs.slide_masters[0]
 LAYOUTS = {l.name: l for l in master.slide_layouts}
@@ -569,7 +570,7 @@ def build_conclusion(prs, study_name, citation, key_finding, bullets):
 ## Save
 
 ```python
-prs.save("/home/claude/output.pptx")
+prs.save("output.pptx")
 ```
 
 Then run Phase 4 QA from SKILL.md.

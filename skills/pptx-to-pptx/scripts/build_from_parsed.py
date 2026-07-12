@@ -28,8 +28,20 @@ except ImportError:
     Image = None
 
 # ── Shared paths ──
-TEMPLATE = "/mnt/skills/user/academic-paper-to-pptx/references/template.pptx"
-LOGO_PATH = "/mnt/skills/user/academic-paper-to-pptx/references/Picture_3.x-wmf"
+# The shared Moffitt references live in the sibling academic-paper-to-pptx skill.
+# The relative layout is the same in every install location (repo, ~/.claude/skills,
+# desktop-app sandbox), so resolve from this script's own location; MOFFITT_REFS_DIR
+# overrides for non-standard setups.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_REFS = os.path.normpath(
+    os.path.join(_SCRIPT_DIR, "..", "..", "academic-paper-to-pptx", "references")
+)
+_SANDBOX_REFS = "/mnt/skills/user/academic-paper-to-pptx/references"
+REFS_DIR = os.environ.get("MOFFITT_REFS_DIR") or (
+    _DEFAULT_REFS if os.path.isdir(_DEFAULT_REFS) else _SANDBOX_REFS
+)
+TEMPLATE = os.path.join(REFS_DIR, "template.pptx")
+LOGO_PATH = os.path.join(REFS_DIR, "Picture_3.x-wmf")
 
 # ── Colors (from style-spec.md) ──
 TITLE_BLUE = RGBColor(0x00, 0x33, 0x66)
@@ -431,7 +443,7 @@ def transfer_notes(output_slide, slide_data):
 #  Main build orchestrator
 # ═══════════════════════════════════════════════════
 
-def build_presentation(parsed_data, output_path, study_name="", citation="", images_dir="/home/claude/source_images"):
+def build_presentation(parsed_data, output_path, study_name="", citation="", images_dir="source_images"):
     """Build the complete Moffitt-styled presentation from parsed data."""
     # Copy template
     shutil.copy(TEMPLATE, output_path)
@@ -496,10 +508,10 @@ def build_presentation(parsed_data, output_path, study_name="", citation="", ima
 def main():
     parser = argparse.ArgumentParser(description="Build Moffitt PPTX from parsed JSON")
     parser.add_argument("json_path", help="Path to parsed JSON (from parse_pptx.py)")
-    parser.add_argument("--output", "-o", default="/home/claude/output.pptx", help="Output PPTX path")
+    parser.add_argument("--output", "-o", default="output.pptx", help="Output PPTX path")
     parser.add_argument("--study-name", default="", help="Study name for badge")
     parser.add_argument("--citation", default="", help="Citation text for footer")
-    parser.add_argument("--images-dir", default="/home/claude/source_images", help="Directory with extracted/rasterized images")
+    parser.add_argument("--images-dir", default="source_images", help="Directory with extracted/rasterized images")
     args = parser.parse_args()
 
     if not os.path.exists(args.json_path):
