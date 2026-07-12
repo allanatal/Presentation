@@ -216,3 +216,55 @@ def test_render_table_dims_center_and_floor(tmp_path):
                     if r.font.size:
                         assert r.font.size.pt >= 14
     assert "No treatment-related deaths." in _texts(slide)
+
+
+# ═══════════ Task 5: study-design + CONSORT renderers ═══════════
+
+def test_render_study_design_diagram_floor_and_content(tmp_path):
+    ctx, out = _new_ctx(tmp_path)
+    s = {"type": "study_design",
+         "description": "Multicenter phase 3 trial in 222 patients",
+         "eligibility": ["Age 18-75 y", "Gastric adenocarcinoma"],
+         "randomization": "2:1", "n": "N = 222",
+         "arms": [{"name": "IP group (n=148)", "detail": "IP+IV paclitaxel + S-1", "color": "teal"},
+                  {"name": "PS group (n=74)", "detail": "IV paclitaxel + S-1", "color": "gray"}],
+         "primary_endpoints": ["Overall survival"],
+         "secondary_endpoints": ["PFS", "Safety"],
+         "registration": "ChiCTR-IIR-16009802",
+         "footer": "Treatment until progression"}
+    bd.render_study_design(ctx, s, 5)
+    slide = ctx.prs.slides[0]
+    txt = _texts(slide)
+    for tok in ["N = 222", "2:1", "IP group (n=148)", "Overall survival",
+                "ChiCTR-IIR-16009802"]:
+        assert tok in txt
+    for sh in slide.shapes:
+        if sh.has_text_frame and not (sh.is_placeholder and sh.placeholder_format.idx == 0):
+            for p in sh.text_frame.paragraphs:
+                for r in p.runs:
+                    if r.font.size:
+                        assert r.font.size.pt >= 12
+
+
+def test_render_consort_content(tmp_path):
+    ctx, out = _new_ctx(tmp_path)
+    s = {"type": "consort",
+         "assessed": "246 Assessed for eligibility",
+         "excluded": ["8 Excluded", "6 Did not meet criteria; 2 declined"],
+         "randomized": "238 Randomized (2:1)",
+         "arms": [
+            {"color": "teal",
+             "allocated": ["158 Allocated to IP group", "IP + IV paclitaxel + S-1"],
+             "not_received": ["10 Did not receive intervention", "declined IP port"],
+             "received": "148 Received intervention (mITT)",
+             "outcomes": ["Conversion surgery: 75 (63 R0, 12 R2)", "132 died"]},
+            {"color": "gray",
+             "allocated": ["80 Allocated to PS group", "IV paclitaxel + S-1"],
+             "not_received": ["6 Did not receive intervention", "local treatment"],
+             "received": "74 Received intervention (mITT)",
+             "outcomes": ["Conversion surgery: 26 (22 R0, 4 R2)", "69 died"]}]}
+    bd.render_consort(ctx, s, 7)
+    slide = ctx.prs.slides[0]
+    txt = _texts(slide)
+    for tok in ["246", "238", "158", "80", "148", "74", "75", "26"]:
+        assert tok in txt

@@ -345,3 +345,165 @@ def render_table(ctx, s, n):
         p.font.size = Pt(14); p.font.name = FONT; p.font.italic = True; p.font.color.rgb = BODY
     add_badge_and_citation(ctx, slide)
     return slide
+
+
+def render_study_design(ctx, s, n):
+    slide = ctx.prs.slides.add_slide(ctx.layouts["Title Only"])
+    slide.placeholders[0].text = s.get("title", "Study Design")
+    desc = slide.shapes.add_textbox(Emu(838200), Emu(1420000), Emu(10515600), Emu(600000))
+    desc.text_frame.word_wrap = True
+    p = desc.text_frame.paragraphs[0]
+    p.text = s["description"]
+    p.font.size = pt(14, F_DIAG); p.font.italic = True
+    p.font.color.rgb = TITLE_BLUE; p.font.name = FONT
+
+    content_y = Emu(2250000)
+    # Eligibility box (left)
+    elig = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Emu(280000), content_y,
+                                  Emu(3350000), Emu(3550000))
+    elig.fill.solid(); elig.fill.fore_color.rgb = LIGHT_BG
+    elig.line.color.rgb = BORDER; elig.line.width = Pt(0.75)
+    tf = elig.text_frame; tf.word_wrap = True
+    ph = tf.paragraphs[0]; ph.text = s.get("eligibility_header", "Key Eligibility")
+    ph.font.size = Pt(13); ph.font.bold = True; ph.font.color.rgb = BODY; ph.font.name = FONT
+    for crit in s.get("eligibility", []):
+        pe = tf.add_paragraph(); pe.text = "• " + crit
+        pe.font.size = pt(12, F_DIAG); pe.font.color.rgb = BODY; pe.font.name = FONT
+    for extra in s.get("eligibility_notes", []):
+        pn = tf.add_paragraph(); pn.text = extra
+        pn.font.size = pt(12, F_DIAG); pn.font.italic = True
+        pn.font.color.rgb = GRAY; pn.font.name = FONT
+
+    # Randomization circle
+    circ_x, circ_y, circ_d = Emu(3850000), content_y + Emu(1150000), Emu(950000)
+    circ = slide.shapes.add_shape(MSO_SHAPE.OVAL, circ_x, circ_y, circ_d, circ_d)
+    circ.fill.solid(); circ.fill.fore_color.rgb = CIRCLE_BLUE; circ.line.fill.background()
+    ctf = circ.text_frame
+    ctf.paragraphs[0].text = "R"
+    ctf.paragraphs[0].font.size = Pt(18); ctf.paragraphs[0].font.bold = True
+    ctf.paragraphs[0].font.color.rgb = WHITE; ctf.paragraphs[0].alignment = PP_ALIGN.CENTER
+    ctf.paragraphs[0].font.name = FONT
+    pr = ctf.add_paragraph(); pr.text = s.get("randomization", "")
+    pr.font.size = Pt(13); pr.font.bold = True; pr.font.color.rgb = WHITE
+    pr.alignment = PP_ALIGN.CENTER; pr.font.name = FONT
+    nb = slide.shapes.add_textbox(circ_x - Emu(150000), circ_y + circ_d + Emu(40000),
+                                  circ_d + Emu(300000), Emu(300000))
+    pn = nb.text_frame.paragraphs[0]; pn.text = s.get("n", "")
+    pn.font.size = pt(13, F_DIAG); pn.font.bold = True; pn.font.color.rgb = BODY
+    pn.alignment = PP_ALIGN.CENTER; pn.font.name = FONT
+
+    # Arms
+    arms = s["arms"]
+    arm_x, arm_w = Emu(5150000), Emu(3450000)
+    span = Emu(3300000)
+    n_arms = len(arms)
+    arm_h = min(Emu(1400000), span // n_arms - Emu(80000)) if n_arms else Emu(1400000)
+    step = span // n_arms if n_arms else span
+    for i, arm in enumerate(arms):
+        ay = content_y + Emu(250000) + step * i
+        a = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, arm_x, ay, arm_w, arm_h)
+        a.fill.solid(); a.fill.fore_color.rgb = col(arm.get("color", "teal"))
+        a.line.fill.background()
+        atf = a.text_frame; atf.word_wrap = True
+        pa = atf.paragraphs[0]; pa.text = arm["name"]
+        pa.font.size = Pt(14); pa.font.bold = True; pa.font.color.rgb = WHITE; pa.font.name = FONT
+        if arm.get("detail"):
+            pd = atf.add_paragraph(); pd.text = arm["detail"]
+            pd.font.size = pt(12, F_DIAG); pd.font.color.rgb = WHITE; pd.font.name = FONT
+
+    # Endpoints box (right)
+    ep = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Emu(8850000),
+                                content_y + Emu(250000), Emu(2950000), Emu(3050000))
+    ep.fill.solid(); ep.fill.fore_color.rgb = LIGHT_BG
+    ep.line.color.rgb = BORDER; ep.line.width = Pt(0.75)
+    etf = ep.text_frame; etf.word_wrap = True
+    pe = etf.paragraphs[0]
+    pe.text = "Primary Endpoint" + ("s" if len(s.get("primary_endpoints", [])) > 1 else "")
+    pe.font.size = Pt(13); pe.font.bold = True; pe.font.color.rgb = BODY; pe.font.name = FONT
+    for e in s.get("primary_endpoints", []):
+        p = etf.add_paragraph(); p.text = "• " + e
+        p.font.size = pt(12, F_DIAG); p.font.color.rgb = BODY; p.font.name = FONT
+    ps = etf.add_paragraph(); ps.text = "Secondary Endpoints"
+    ps.font.size = Pt(13); ps.font.bold = True; ps.font.color.rgb = TITLE_BLUE; ps.font.name = FONT
+    for e in s.get("secondary_endpoints", []):
+        p = etf.add_paragraph(); p.text = "• " + e
+        p.font.size = pt(12, F_DIAG); p.font.color.rgb = BODY; p.font.name = FONT
+    if s.get("registration"):
+        preg = etf.add_paragraph(); preg.text = "Registration: " + s["registration"]
+        preg.font.size = pt(12, F_DIAG); preg.font.color.rgb = GRAY; preg.font.name = FONT
+
+    # arrows
+    def arrow(x1, y1, x2, y2):
+        cn = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Emu(x1), Emu(y1), Emu(x2), Emu(y2))
+        cn.line.color.rgb = CONN_GRAY; cn.line.width = Pt(1.5)
+    arrow(3630000, content_y + Emu(1600000), 3850000, content_y + Emu(1600000))
+    for i in range(n_arms):
+        ay = content_y + Emu(250000) + step * i + arm_h // 2
+        arrow(4800000, content_y + Emu(1600000), 5150000, ay)
+        arrow(8600000, ay, 8850000, content_y + Emu(1600000))
+
+    if s.get("footer"):
+        dur = slide.shapes.add_textbox(Emu(280000), content_y + Emu(3650000),
+                                       Emu(11600000), Emu(400000))
+        pd = dur.text_frame.paragraphs[0]; pd.text = s["footer"]
+        pd.font.size = pt(12, F_DIAG); pd.font.color.rgb = BODY
+        pd.alignment = PP_ALIGN.CENTER; pd.font.name = FONT
+    add_badge_and_citation(ctx, slide)
+    return slide
+
+
+def render_consort(ctx, s, n):
+    slide = ctx.prs.slides.add_slide(ctx.layouts["Title Only"])
+    slide.placeholders[0].text = s.get("title", "CONSORT Flow Diagram")
+
+    def box(x, y, w, h, lines, fill=WHITE, edge=BORDER):
+        b = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Emu(x), Emu(y), Emu(w), Emu(h))
+        b.fill.solid(); b.fill.fore_color.rgb = fill
+        b.line.color.rgb = edge; b.line.width = Pt(0.75)
+        tf = b.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        tf.margin_top = Emu(30000); tf.margin_bottom = Emu(30000)
+        for i, (txt, bold, colr, sz) in enumerate(lines):
+            p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            p.text = txt; p.font.size = pt(sz, F_DIAG); p.font.bold = bold
+            p.font.color.rgb = colr; p.font.name = FONT
+        return b
+
+    def conn(x1, y1, x2, y2):
+        cn = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Emu(x1), Emu(y1), Emu(x2), Emu(y2))
+        cn.line.color.rgb = CONN_GRAY; cn.line.width = Pt(1.5)
+
+    arms = s["arms"]
+    centers = [3350000, 8850000] if len(arms) == 2 else \
+        [int(2200000 + (7800000 / max(len(arms) - 1, 1)) * i) for i in range(len(arms))]
+    bw = 3450000
+    top_c = sum(centers) // len(centers)
+
+    box(top_c - 1900000, 1500000, 3800000, 470000, [(s["assessed"], True, BODY, 13)])
+    ex = s.get("excluded", [])
+    if ex:
+        box(top_c + 2100000, 1470000, 3350000, 560000,
+            [(ex[0], True, BODY, 12)] + [(t, False, BODY, 12) for t in ex[1:]])
+        conn(top_c + 1900000, 1735000, top_c + 2100000, 1735000)
+    box(top_c - 1900000, 2180000, 3800000, 470000, [(s["randomized"], True, BODY, 13)])
+    conn(top_c, 1970000, top_c, 2180000)
+
+    for arm, cx in zip(arms, centers):
+        x = cx - bw // 2
+        alloc = arm["allocated"]
+        box(x, 2870000, bw, 560000,
+            [(alloc[0], True, WHITE, 12)] + [(t, False, WHITE, 12) for t in alloc[1:]],
+            fill=col(arm.get("color", "teal")), edge=col(arm.get("color", "teal")))
+        conn(top_c, 2650000, cx, 2870000)
+        nr = arm.get("not_received", [])
+        if nr:
+            box(x + 300000, 3560000, bw - 300000, 470000,
+                [(nr[0], False, BODY, 12)] + [(t, False, GRAY, 12) for t in nr[1:]])
+            conn(cx, 3430000, cx, 3560000)
+        box(x, 4130000, bw, 470000, [(arm["received"], True, BODY, 12)], fill=LIGHT_BG)
+        conn(cx, 4030000, cx, 4130000)
+        oc = arm.get("outcomes", [])
+        if oc:
+            box(x, 4720000, bw, 1500000, [(t, False, BODY, 12) for t in oc], fill=WHITE)
+            conn(cx, 4600000, cx, 4720000)
+    add_badge_and_citation(ctx, slide)
+    return slide
