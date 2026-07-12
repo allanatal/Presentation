@@ -489,17 +489,25 @@ def build_slide(prs, slide_data, study_name="", citation="",
 
     elements = slide_data["elements"]
 
+    # NOTE: never test `idx in slide.placeholders` — membership iterates shape
+    # objects, so it is always False for an int and silently drops content.
+    def placeholder_by_idx(slide, idx):
+        return next((ph for ph in slide.placeholders
+                     if ph.placeholder_format.idx == idx), None)
+
     # ── Place title ──
     title_el = next((e for e in elements if e["type"] == "text" and e.get("role") == "title"), None)
-    if title_el and 0 in slide.placeholders:
-        slide.placeholders[0].text = title_el["full_text"]
-        set_title_font(slide.placeholders[0], 24)
+    title_ph = placeholder_by_idx(slide, 0)
+    if title_el and title_ph is not None:
+        title_ph.text = title_el["full_text"]
+        set_title_font(title_ph, 24)
 
     # ── Place body into placeholder (only for "Title and Content" layout) ──
     if layout_name == "Title and Content":
         body_els = [e for e in elements if e["type"] == "text" and e.get("role") == "body"]
-        if body_els and 1 in slide.placeholders:
-            tf = slide.placeholders[1].text_frame
+        body_ph = placeholder_by_idx(slide, 1)
+        if body_els and body_ph is not None:
+            tf = body_ph.text_frame
             tf.clear()
             first = True
             for body_el in body_els:

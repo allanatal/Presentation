@@ -85,6 +85,15 @@ def add_badge_and_citation(slide, study_name="", citation_text=""):
         p.alignment = PP_ALIGN.RIGHT
 
 
+def placeholder_by_idx(slide, idx):
+    """Look up a placeholder by its idx. `idx in slide.placeholders` is a trap:
+    membership iterates shape objects, so it is always False for an int."""
+    for ph in slide.placeholders:
+        if ph.placeholder_format.idx == idx:
+            return ph
+    return None
+
+
 def get_title_text(slide_data):
     """Extract the title text from a parsed slide."""
     for el in slide_data.get("elements", []):
@@ -182,8 +191,8 @@ def build_title_slide(prs, layouts, slide_data, study_name, citation):
         para.font.name = FONT
 
     # Set subtitle
-    if subtitle_text and 1 in slide.placeholders:
-        sub_ph = slide.placeholders[1]
+    sub_ph = placeholder_by_idx(slide, 1)
+    if subtitle_text and sub_ph is not None:
         sub_ph.text = subtitle_text
         for para in sub_ph.text_frame.paragraphs:
             para.font.size = Pt(18)
@@ -216,8 +225,9 @@ def build_content_slide(prs, layouts, slide_data, study_name, citation):
 
     # Body
     body_paras = get_body_paragraphs(slide_data)
-    if body_paras and 1 in slide.placeholders:
-        tf = slide.placeholders[1].text_frame
+    body_ph = placeholder_by_idx(slide, 1)
+    if body_paras and body_ph is not None:
+        tf = body_ph.text_frame
         tf.clear()
 
         first = True

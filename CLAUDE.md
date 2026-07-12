@@ -44,3 +44,9 @@ their shared QA tooling. Remote: https://github.com/allanatal/Presentation.git
   architecture lineage (PptxGenJS), not an older version of the same files. Never assume
   newest timestamp == same lineage; diff before consolidating. The CONSORT builder was lost
   in the PptxGenJS→python-pptx rewrite (preserved in docs/legacy, candidate future port).
+- 2026-07-11 — Pre-existing bug found by the new QA cross-check on its first real run:
+  `build_from_parsed.py` used `1 in slide.placeholders`, which is ALWAYS False in python-pptx
+  (membership iterates shape objects, not idx ints), silently dropping every content slide's
+  bullets and every title-slide subtitle. Fixed with `placeholder_by_idx()`; the same trap was
+  in SKILL.md example code. Never use `idx in slide.placeholders`; and never trust a
+  conversion pipeline that hasn't been checked by content diffing.

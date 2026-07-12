@@ -119,7 +119,9 @@ def extract_deck(pptx_path):
     for s_i, slide in enumerate(prs.slides, start=1):
         info = {
             "number": s_i,
-            "texts": [],          # all visible text fragments
+            "texts": [],          # content text fragments (used for numeric checks)
+            "ref_texts": [],      # badge/citation boxes — reference elements, exempt
+                                  # from orphan/added checks (authenticity is MANUAL)
             "font_violations": [],
             "pictures": [],       # (name, area_fraction)
             "editable_shapes": 0,
@@ -159,9 +161,12 @@ def extract_deck(pptx_path):
                 txt = shape.text_frame.text
                 if txt.strip():
                     info["editable_shapes"] += 1
-                    info["texts"].append(txt)
-                    if is_citation(shape):
-                        info["has_citation"] = True
+                    if is_citation(shape) or is_badge(shape):
+                        info["ref_texts"].append(txt)
+                        if is_citation(shape):
+                            info["has_citation"] = True
+                    else:
+                        info["texts"].append(txt)
                 for para in shape.text_frame.paragraphs:
                     floor, ctx = font_floor_for(shape, para.level, in_table=False)
                     if floor is None:
@@ -250,11 +255,21 @@ def check_orphans(deck_slides, source_tokens, extra_known, skip_first_slide=True
 def check_placeholders(deck_slides):
     hits = []
     for s in deck_slides:
-        for txt in s["texts"]:
+        for txt in s["texts"] + s["ref_texts"]:
             for line in txt.splitlines():
                 if "[CHECK" in line.upper():
                     hits.append((s["number"], line.strip()[:80]))
     return hits
+
+
+def _is_ref_element(el):
+    """Source-deck badge/citation boxes — same positional exemption as the deck side."""
+    if el.get("role") == "badge":
+        return True
+    pos = el.get("position") or {}
+    left, top = pos.get("left") or 0, pos.get("top") or 0
+    return (left >= BADGE_LEFT_MIN and top <= BADGE_TOP_MAX) or \
+           (left >= CITATION_LEFT_MIN and top >= CITATION_TOP_MIN)
 
 
 def check_pptx_mode(claims_data, deck_slides):
@@ -269,6 +284,7 @@ def check_pptx_mode(claims_data, deck_slides):
         src_text = " ".join(
             el.get("full_text", "") or " ".join(str(c) for row in el.get("rows", []) for c in row)
             for el in src_slides[i].get("elements", [])
+            if not _is_ref_element(el)
         )
         src_toks = set(t.rstrip("%") for t in numeric_tokens(src_text))
         out_toks = set(t.rstrip("%") for t in

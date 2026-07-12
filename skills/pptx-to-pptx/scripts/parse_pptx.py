@@ -42,6 +42,13 @@ def classify_text_role(shape, paragraphs):
 
     # Heuristic: position + font size
     top_inches = shape.top / 914400 if shape.top else 0
+    left_inches = shape.left / 914400 if shape.left else 0
+
+    # Study-name badge (top-right reference element) — must not become body content;
+    # the builder re-adds it via --study-name
+    if top_inches < 0.7 and left_inches > 10:
+        return "badge"
+
     avg_font = None
     for p in paragraphs:
         if p.get("font_size"):
