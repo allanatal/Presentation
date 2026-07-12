@@ -1,0 +1,18 @@
+{
+  "deck": {"study": "MINI-01", "citation": "Synthetic et al. 2026",
+           "title": "MINI-01: Synthetic Trial", "subtitle": "A Phase 3 Synthetic Trial",
+           "authors": "Synthetic A, Synthetic B", "affiliation": "Nowhere Center",
+           "date": "Synthetic Journal 2026"},
+  "slides": [
+    {"type": "title"},
+    {"type": "bullets", "title": "Background",
+     "bullets": [{"text": "A synthetic point"}, {"text": "Another", "sub": ["a subpoint"]}]},
+    {"type": "table", "title": "Baseline", "label_header": "Characteristic",
+     "key_message": "Balanced arms.",
+     "arms": [{"label": "A (n=148)", "color": "teal"}, {"label": "B (n=74)", "color": "gray"}],
+     "rows": [{"label": "Age, median (range)", "vals": ["60 (24-70)", "56 (23-74)"], "bold": true}],
+     "claims": ["dem-01"]},
+    {"type": "bullets", "title": "Primary Result",
+     "bullets": [{"text": "Median OS {{eff-01}} vs {{eff-02}}; {{eff-03}}", "bold": true}]}
+  ]
+}

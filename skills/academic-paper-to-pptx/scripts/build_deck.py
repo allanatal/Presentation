@@ -507,3 +507,113 @@ def render_consort(ctx, s, n):
             conn(cx, 4600000, cx, 4720000)
     add_badge_and_citation(ctx, slide)
     return slide
+
+
+# ═══════════════════════════════════════════════════
+#  Orchestrator + CLI
+# ═══════════════════════════════════════════════════
+
+RENDERERS = {
+    "title": render_title,
+    "bullets": render_bullets,
+    "table": render_table,
+    "figure": render_figure,
+    "study_design": render_study_design,
+    "consort": render_consort,
+}
+
+
+def resolve_skill_root(cli):
+    if cli:
+        return cli
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_root = os.path.normpath(os.path.join(script_dir, ".."))
+    if os.path.isdir(os.path.join(default_root, "references")):
+        return default_root
+    return "/mnt/skills/user/academic-paper-to-pptx"
+
+
+def build_from_files(spec_path, claims_path, out_path, resolved_path=None,
+                     images_base=None, skill_root=None, allow_unreferenced=False):
+    with open(spec_path) as f:
+        spec = json.load(f)
+    with open(claims_path) as f:
+        claims_data = json.load(f)
+    if images_base is None:
+        images_base = os.path.dirname(os.path.abspath(spec_path))
+    skill_root = resolve_skill_root(skill_root)
+
+    claims = Claims(claims_data)
+    template = os.path.join(skill_root, "references", "template.pptx")
+    shutil.copy(template, out_path)
+    prs = Presentation(out_path)
+    layouts = {l.name: l for l in prs.slide_masters[0].slide_layouts}
+
+    deck_meta = spec.get("deck", {})
+    ctx = Ctx(prs=prs, layouts=layouts,
+              study=deck_meta.get("study", ""),
+              citation=deck_meta.get("citation", ""),
+              skill_root=skill_root, images_base=images_base)
+
+    for i, sdata in enumerate(spec.get("slides", []), start=1):
+        if sdata.get("type") == "title":
+            for k in ("title", "subtitle", "authors", "affiliation", "date"):
+                sdata.setdefault(k, deck_meta.get(k))
+        substitute_in_place(sdata, claims, i)
+        assign_slide_claims(sdata, claims, i)
+        t = sdata.get("type")
+        if t not in RENDERERS:
+            print(f"ERROR: slide {i}: unknown slide type {t!r} "
+                  f"(known: {sorted(RENDERERS)})", file=sys.stderr)
+            return 3
+        RENDERERS[t](ctx, sdata, i)
+
+    prs.save(out_path)
+
+    unref = claims.unreferenced()
+    if unref and not allow_unreferenced:
+        print(f"ERROR: {len(unref)} claim(s) never referenced by any slide: "
+              f"{', '.join(unref)}\n  Every claim must appear on a slide (use a "
+              f"{{{{id}}}} token or a slide-level \"claims\" list), or pass "
+              f"--allow-unreferenced.", file=sys.stderr)
+        return 2
+
+    if resolved_path:
+        with open(resolved_path, "w") as f:
+            json.dump(claims.resolved_json(), f, indent=2, ensure_ascii=False)
+        print(f"Resolved claims: {os.path.abspath(resolved_path)}")
+
+    print(f"Saved deck: {os.path.abspath(out_path)} "
+          f"({len(spec.get('slides', []))} slides, "
+          f"{len(claims.referenced)}/{len(claims.by_id)} claims placed)")
+    if unref:
+        print(f"WARNING: unreferenced claims (allowed): {', '.join(unref)}", file=sys.stderr)
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Build a Moffitt deck from a deck spec + claims")
+    ap.add_argument("spec", help="deck_spec.json")
+    ap.add_argument("--claims", required=True, help="claims JSON (qa-checklist.md schema)")
+    ap.add_argument("--out", "-o", required=True, help="output .pptx path")
+    ap.add_argument("--resolved-claims", default=None,
+                    help="write claims JSON with slide numbers filled (for qa_crosscheck)")
+    ap.add_argument("--images-base", default=None,
+                    help="base dir for relative figure paths (default: spec dir)")
+    ap.add_argument("--skill-root", default=None, help="override skill root")
+    ap.add_argument("--allow-unreferenced", action="store_true",
+                    help="do not fail when some claims are never placed on a slide")
+    args = ap.parse_args()
+    for path in (args.spec, args.claims):
+        if not os.path.exists(path):
+            print(f"Error: not found: {path}", file=sys.stderr)
+            sys.exit(2)
+    rc = build_from_files(args.spec, args.claims, args.out,
+                          resolved_path=args.resolved_claims,
+                          images_base=args.images_base, skill_root=args.skill_root,
+                          allow_unreferenced=args.allow_unreferenced)
+    sys.exit(rc)
+
+
+if __name__ == "__main__":
+    main()

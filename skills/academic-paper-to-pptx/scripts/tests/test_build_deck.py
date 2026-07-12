@@ -268,3 +268,38 @@ def test_render_consort_content(tmp_path):
     txt = _texts(slide)
     for tok in ["246", "238", "158", "80", "148", "74", "75", "26"]:
         assert tok in txt
+
+
+# ═══════════ Task 6: orchestrator + CLI ═══════════
+
+def test_build_presentation_end_to_end(tmp_path):
+    here = os.path.dirname(os.path.abspath(__file__))
+    spec = os.path.join(here, "fixtures", "mini_spec.json")
+    claims = os.path.join(here, "fixtures", "mini_claims.json")
+    out = str(tmp_path / "mini.pptx")
+    resolved = str(tmp_path / "mini_claims_resolved.json")
+    rc = bd.build_from_files(spec, claims, out, resolved_path=resolved,
+                             images_base=os.path.dirname(spec))
+    assert rc == 0
+    assert os.path.exists(out)
+    with open(resolved) as f:
+        rdata = json.load(f)
+    for c in rdata["claims"]:
+        assert c["slide"] is not None, c["id"]
+    prs = Presentation(out)
+    assert len(prs.slides._sldIdLst) == 4
+
+
+def test_build_unreferenced_claim_fails_without_flag(tmp_path):
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "fixtures", "mini_spec.json")) as f:
+        spec = json.load(f)
+    for sl in spec["slides"]:
+        sl.pop("claims", None)
+    spec_path = tmp_path / "spec_missing.json"
+    spec_path.write_text(json.dumps(spec))
+    claims = os.path.join(here, "fixtures", "mini_claims.json")
+    out = str(tmp_path / "x.pptx")
+    rc = bd.build_from_files(str(spec_path), claims, out, resolved_path=None,
+                             images_base=here, allow_unreferenced=False)
+    assert rc != 0  # dem-01 never referenced
