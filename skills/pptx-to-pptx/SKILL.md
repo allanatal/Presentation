@@ -28,6 +28,8 @@ The bundled scripts resolve the shared references automatically (relative to the
 - `references/template.pptx` — Moffitt slide master
 - `references/slide-builders.md` — python-pptx code patterns
 - `references/style-spec.md` — colors, positions, font rules
+- `references/qa-checklist.md` — QA workflow and checklist rules
+- `scripts/qa_crosscheck.py` — deterministic QA cross-check (run in Phase 4)
 
 **Always read both `slide-builders.md` and `style-spec.md` before writing any code.** They contain the authoritative font sizes, color values, and positioning constants.
 
@@ -849,6 +851,17 @@ ls -1 "$PWD"/slide-*.jpg
 8. **All tables, textboxes, and shapes are editable (not rasterized)**
 
 **Compare source vs output side-by-side** by viewing both thumbnail grids.
+
+### Automated cross-check (mandatory)
+
+Read the shared `references/qa-checklist.md`, then run the shared script in **pptx mode**, using the Phase 1 parse of the **source** deck as ground truth:
+
+```bash
+python "<academic-paper-to-pptx skill root>/scripts/qa_crosscheck.py" output.pptx \
+    --claims parsed.json --mode pptx
+```
+
+It compares numeric content slide-by-slide (numbers added by the conversion are hard fails; numbers dropped by content trimming are warnings for review), audits font floors, and enforces the editability principle (any full-slide screenshot is a hard fail; every embedded picture is listed for justification). **Fix every ❌ and re-run until clean.** Deliver the deck together with its `<deckname>_QA.md`.
 
 Fix issues and re-verify once.
 

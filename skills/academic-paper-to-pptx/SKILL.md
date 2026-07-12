@@ -95,6 +95,10 @@ Read the full markdown and extract these elements. **Never invent data** — eve
 
 **Data fidelity**: Cross-check extracted values against rasterized page images when uncertain. Never round, estimate, or infer. Use `[CHECK]` placeholders for anything uncertain and flag to the user.
 
+### Step 1d: Write the Claims File
+
+Persist every number destined for slides to `<deckname>_claims.json` in the working directory, following the schema in `references/qa-checklist.md`. One claim per verifiable statement (HR+CI+p, median, ORR, each Table 1 row, AE %s, arm sizes, NCT). Values verbatim from the paper; `slide` stays `null` until Phase 3. Keep the markdown text (`paper_text.md`) — the QA step uses it for the orphan-number check.
+
 ---
 
 ## Phase 2: Extract Figures from PDF
@@ -218,6 +222,10 @@ These are hard minimums — never go below them regardless of content density. I
 
 Use `slide.shapes.add_picture()` with extracted images from Phase 2. Always calculate aspect ratio to avoid distortion.
 
+### Claims Bookkeeping
+
+As each slide is built, fill in the `slide` number of every claim it carries in `<deckname>_claims.json`. Every claim must be assigned before Phase 4.
+
 ---
 
 ## Phase 4: QA
@@ -230,7 +238,7 @@ rm -f slide-*.jpg
 pdftoppm -jpeg -r 150 output.pdf slide
 ```
 
-**Check for:**
+**Visual check for:**
 1. Data accuracy — key numbers match the paper
 2. Text overflow in tables and bullets
 3. Image placement and aspect ratio
@@ -238,7 +246,16 @@ pdftoppm -jpeg -r 150 output.pdf slide
 5. Branding elements present on every slide (inherited from template)
 6. Citations on content slides
 
-Fix and re-verify once.
+### Automated cross-check (mandatory)
+
+Read `references/qa-checklist.md`, then run:
+
+```bash
+python "<skill-root>/scripts/qa_crosscheck.py" output.pptx \
+    --claims <deckname>_claims.json --mode paper --source-text paper_text.md
+```
+
+The script exits non-zero on any ❌ (claim number missing from its slide, orphan number not in the source, unresolved `[CHECK]`, font below floors, full-slide image). **Fix every ❌ and re-run until clean.** The deck is delivered **together with** its `<deckname>_QA.md`; the remaining MANUAL lines are the user's eyeball pass against the source.
 
 ---
 
@@ -258,5 +275,7 @@ Fix and re-verify once.
 | `references/template.pptx` | Moffitt slide master template (open with python-pptx) |
 | `references/slide-builders.md` | Python-pptx code patterns for every slide type |
 | `references/style-spec.md` | Quick reference for colors, positions, and manual elements |
+| `references/qa-checklist.md` | QA workflow, claims-file schema, checklist rules |
 | `references/Picture_3.x-wmf` | Moffitt Cancer Center logo (for title slide) |
 | `scripts/extract_figures.py` | Extract images from PDF papers |
+| `scripts/qa_crosscheck.py` | Deterministic QA cross-check (shared with pptx-to-pptx) |
